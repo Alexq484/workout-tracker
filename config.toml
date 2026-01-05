@@ -1,0 +1,19 @@
+[theme]
+primaryColor = "#FF4B4B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+font = "sans serif"
+
+[server]
+enableXsrfProtection = true
+enableCORS = false
+```
+
+Create `.gitignore`:
+```
+workouts.db
+__pycache__/
+*.pyc
+.env
+.streamlit/secrets.toml
