@@ -987,6 +987,8 @@ elif page == "Weekly Mileage":
 
 # ==================== HISTORY PAGE ====================
 
+# ==================== HISTORY PAGE ====================
+
 elif page == "History":
     st.title("📅 History")
     
@@ -1008,6 +1010,7 @@ elif page == "History":
                 expander_title += " 📝"
             
             with st.expander(expander_title):
+                # Notes section
                 if workout['notes']:
                     st.markdown(f"""
                     <div class="notes-box">
@@ -1015,34 +1018,115 @@ elif page == "History":
                     </div>
                     """, unsafe_allow_html=True)
                 
+                # Display sets
                 if workout_details['sets']:
-                    sets_data = []
+                    # Group sets by exercise
+                    sets_by_exercise = {}
                     for s in workout_details['sets']:
-                        if s['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]:
-                            miles = s['reps'] / 10.0
-                            time_min = s['weight']
-                            pace = time_min / miles if miles > 0 else 0
-                            sets_data.append({
-                                'Exercise': s['exercise_name'],
-                                'Miles': f"{miles:.1f}",
-                                'Min': f"{time_min:.0f}",
-                                'Pace': f"{int(pace)}:{int((pace % 1) * 60):02d}"
-                            })
+                        ex_name = s['exercise_name']
+                        if ex_name not in sets_by_exercise:
+                            sets_by_exercise[ex_name] = []
+                        sets_by_exercise[ex_name].append(s)
+                    
+                    # Display each exercise
+                    for exercise_name, exercise_sets in sets_by_exercise.items():
+                        st.markdown(f"**{exercise_name}**")
+                        
+                        # Check if running exercise
+                        is_running = exercise_sets[0]['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
+                        
+                        if is_running:
+                            # Display running sets
+                            for s in exercise_sets:
+                                miles = s['reps'] / 10.0
+                                time_min = s['weight']
+                                pace = time_min / miles if miles > 0 else 0
+                                hr = s['set_number']
+                                
+                                col1, col2 = st.columns([5, 1])
+                                with col1:
+                                    st.write(f"{miles:.1f} mi • {time_min:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi" + (f" • {hr} bpm" if hr > 0 else ""))
+                                with col2:
+                                    if st.button("🗑️", key=f"del_set_hist_{s['id']}", use_container_width=True):
+                                        db.delete_set(s['id'])
+                                        st.success("Set deleted!")
+                                        st.rerun()
                         else:
-                            sets_data.append({
-                                'Exercise': s['exercise_name'],
-                                'Set': s['set_number'],
-                                'Reps': s['reps'],
-                                'Lbs': s['weight']
-                            })
+                            # Display strength sets with edit capability
+                            for s in exercise_sets:
+                                col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
+                                
+                                with col1:
+                                    st.write(f"**Set {s['set_number']}**")
+                                
+                                with col2:
+                                    # Editable reps
+                                    new_reps = st.number_input(
+                                        "Reps",
+                                        min_value=1,
+                                        max_value=100,
+                                        value=s['reps'],
+                                        key=f"reps_{s['id']}",
+                                        label_visibility="collapsed"
+                                    )
+                                
+                                with col3:
+                                    # Editable weight
+                                    new_weight = st.number_input(
+                                        "Weight",
+                                        min_value=0.0,
+                                        max_value=1000.0,
+                                        value=float(s['weight']),
+                                        step=5.0,
+                                        key=f"weight_{s['id']}",
+                                        label_visibility="collapsed"
+                                    )
+                                
+                                with col4:
+                                    # Save/Delete buttons
+                                    if new_reps != s['reps'] or new_weight != s['weight']:
+                                        if st.button("💾", key=f"save_{s['id']}", use_container_width=True):
+                                            db.update_set(s['id'], new_reps, new_weight)
+                                            st.success("Updated!")
+                                            st.rerun()
+                                    else:
+                                        if st.button("🗑️", key=f"del_set_hist_{s['id']}", use_container_width=True):
+                                            db.delete_set(s['id'])
+                                            st.success("Set deleted!")
+                                            st.rerun()
+                                
+                                # Show volume and 1RM
+                                volume = new_reps * new_weight
+                                est_1rm = calculate_estimated_1rm(new_weight, new_reps)
+                                st.caption(f"Vol: {volume:,.0f} • 1RM: {est_1rm:.0f} lbs")
+                        
+                        st.divider()
+                
+                # Edit notes button
+                with st.expander("✏️ Edit Notes"):
+                    current_notes = workout['notes'] if workout['notes'] else ""
                     
-                    df = pd.DataFrame(sets_data)
-                    st.dataframe(df, hide_index=True, use_container_width=True)
+                    new_notes = st.text_area(
+                        "Workout Notes",
+                        value=current_notes,
+                        key=f"notes_{workout['id']}",
+                        height=100,
+                        label_visibility="collapsed"
+                    )
                     
-                    if st.button(f"🗑️ Delete", key=f"del_{workout['id']}", use_container_width=True):
-                        db.delete_workout(workout['id'])
-                        st.success("Deleted")
-                        st.rerun()
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("💾 Save", key=f"save_notes_{workout['id']}", use_container_width=True):
+                            db.update_workout_notes(workout['id'], new_notes)
+                            st.success("Notes updated!")
+                            st.rerun()
+                
+                # Delete entire workout
+                st.divider()
+                if st.button(f"🗑️ Delete Entire Workout", key=f"del_{workout['id']}", use_container_width=True, type="secondary"):
+                    db.delete_workout(workout['id'])
+                    st.success("Workout deleted!")
+                    st.rerun()
 
 # ==================== PROGRESS PAGE ====================
 
