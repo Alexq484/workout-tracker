@@ -270,7 +270,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Sidebar navigation with mobile-friendly icons
-st.sidebar.title("💪 Workout Tracker")
+# st.sidebar.title("💪 Workout Tracker")
 page = st.sidebar.radio(
     "Navigate",
     ["📊 Dashboard", "📝 Log Workout", "🏆 PR Records", "📏 Weekly Mileage", "📅 History", "📈 Progress", "⚙️ Manage Exercises"],
@@ -1156,3 +1156,4 @@ elif page == "Manage Exercises":
 st.sidebar.divider()
 st.sidebar.caption("💪 Workout Tracker")
 st.sidebar.caption("Optimized for mobile")
+
