@@ -559,30 +559,34 @@ elif page == "Log Workout":
         st.divider()
         
         # Quick add form - mobile optimized
+        st.divider()
+        
+        # Exercise selector OUTSIDE the form
+        st.subheader("Add Set")
+        
+        exercise_names = [e['name'] for e in exercises]
+        
+        # Set default index based on last exercise
+        default_index = 0
+        if st.session_state.last_exercise and st.session_state.last_exercise in exercise_names:
+            default_index = exercise_names.index(st.session_state.last_exercise)
+        
+        selected_exercise = st.selectbox(
+            "Exercise",
+            exercise_names,
+            index=default_index,
+            key="exercise_select"
+        )
+        
+        # Get exercise object
+        exercise = db.get_exercise_by_name(selected_exercise)
+        
+        # Determine if this is a running exercise
+        is_running = exercise and exercise['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
+        
+        # Quick add form - mobile optimized
         # Force form to reset when exercise changes by using exercise name in form key
         with st.form(key=f"quick_log_{selected_exercise}", clear_on_submit=False):
-            st.subheader("Add Set")
-            
-            # Exercise selector
-            exercise_names = [e['name'] for e in exercises]
-            
-            # Set default index based on last exercise
-            default_index = 0
-            if st.session_state.last_exercise and st.session_state.last_exercise in exercise_names:
-                default_index = exercise_names.index(st.session_state.last_exercise)
-            
-            selected_exercise = st.selectbox(
-                "Exercise",
-                exercise_names,
-                index=default_index,
-                key="exercise_select"
-            )
-            
-            # Get exercise object
-            exercise = db.get_exercise_by_name(selected_exercise)
-            
-            # Determine if this is a running exercise
-            is_running = exercise and exercise['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
             
             # Show last session data
             if exercise:
