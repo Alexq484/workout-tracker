@@ -1258,5 +1258,6 @@ elif page == "Manage Exercises":
 
 # Footer
 st.sidebar.divider()
-# st.sidebar.caption("💪 Workout Tracker")
+st.sidebar.caption("💪 Workout Tracker")
 st.sidebar.caption("Optimized for mobile")
+
