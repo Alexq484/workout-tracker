@@ -25,6 +25,7 @@ if 'selected_category' not in st.session_state:
     st.session_state.selected_category = None
 
 # Custom CSS for mobile optimization
+# Custom CSS for mobile optimization
 st.markdown("""
     <style>
     /* Mobile-first responsive design */
@@ -83,19 +84,38 @@ st.markdown("""
     
     /* Mobile-specific styles */
     @media (max-width: 768px) {
-        /* Force sidebar to be hidden by default */
-        [data-testid="stSidebar"] {
-            transform: translateX(-100%);
+        /* COMPLETELY hide sidebar when collapsed on mobile */
+        section[data-testid="stSidebar"] {
+            position: fixed;
+            left: -100%;
+            transition: left 0.3s ease;
+            z-index: 999;
+            width: 80vw !important;
+            max-width: 80vw !important;
         }
         
-        [data-testid="stSidebar"][aria-expanded="true"] {
-            transform: translateX(0);
+        section[data-testid="stSidebar"][aria-expanded="true"] {
+            left: 0;
         }
         
-        /* Adjust main content padding */
+        /* Hide the sidebar container completely when closed */
+        section[data-testid="stSidebar"] > div:first-child {
+            width: 80vw;
+        }
+        
+        /* Make sure main content uses full width */
         .main .block-container {
             padding-left: 0.5rem;
             padding-right: 0.5rem;
+            max-width: 100%;
+        }
+        
+        /* Remove any sidebar remnants */
+        [data-testid="collapsedControl"] {
+            position: fixed;
+            top: 0.5rem;
+            left: 0.5rem;
+            z-index: 1000;
         }
         
         /* Stack columns on mobile */
@@ -1154,6 +1174,5 @@ elif page == "Manage Exercises":
 
 # Footer
 st.sidebar.divider()
-st.sidebar.caption("💪 Workout Tracker")
+# st.sidebar.caption("💪 Workout Tracker")
 st.sidebar.caption("Optimized for mobile")
-
