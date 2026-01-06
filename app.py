@@ -558,8 +558,9 @@ elif page == "Log Workout":
         
         st.divider()
         
-        # Quick add form
-        with st.form("quick_log", clear_on_submit=False):
+        # Quick add form - mobile optimized
+        # Force form to reset when exercise changes by using exercise name in form key
+        with st.form(key=f"quick_log_{selected_exercise}", clear_on_submit=False):
             st.subheader("Add Set")
             
             # Exercise selector
@@ -605,15 +606,10 @@ elif page == "Log Workout":
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Use session state values if same exercise, otherwise use last session
-                        if st.session_state.last_exercise == selected_exercise:
-                            default_miles = st.session_state.last_miles
-                            default_time = st.session_state.last_time
-                            default_hr = st.session_state.last_hr
-                        else:
-                            default_miles = last_miles
-                            default_time = last_time
-                            default_hr = last_hr if last_hr > 0 else 140
+                        # Use last session values when switching exercises
+                        default_miles = last_miles
+                        default_time = last_time
+                        default_hr = last_hr if last_hr > 0 else 140
                     else:
                         st.markdown(f"""
                         <div class="last-session">
@@ -624,38 +620,25 @@ elif page == "Log Workout":
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Use session state values if same exercise, otherwise use last session
-                        if st.session_state.last_exercise == selected_exercise:
-                            default_weight = st.session_state.last_weight
-                            default_reps = st.session_state.last_reps
-                        else:
-                            default_weight = max(s['weight'] for s in last_session['sets'])
-                            default_reps = last_session['sets'][0]['reps']
+                        # Use last session values when switching exercises
+                        default_weight = max(s['weight'] for s in last_session['sets'])
+                        default_reps = last_session['sets'][0]['reps']
                 else:
-                    # No previous session - use session state or defaults
+                    # No previous session - use defaults
                     if is_running:
-                        if st.session_state.last_exercise == selected_exercise:
-                            default_miles = st.session_state.last_miles
-                            default_time = st.session_state.last_time
-                            default_hr = st.session_state.last_hr
-                        else:
-                            default_miles = 3.0
-                            default_time = 30.0
-                            default_hr = 140
+                        default_miles = 3.0
+                        default_time = 30.0
+                        default_hr = 140
                     else:
-                        if st.session_state.last_exercise == selected_exercise:
-                            default_weight = st.session_state.last_weight
-                            default_reps = st.session_state.last_reps
-                        else:
-                            default_weight = 135.0
-                            default_reps = 10
+                        default_weight = 135.0
+                        default_reps = 10
             else:
-                # No exercise selected - use session state
-                default_weight = st.session_state.last_weight
-                default_reps = st.session_state.last_reps
-                default_miles = st.session_state.last_miles
-                default_time = st.session_state.last_time
-                default_hr = st.session_state.last_hr
+                # No exercise selected - use defaults
+                default_weight = 135.0
+                default_reps = 10
+                default_miles = 3.0
+                default_time = 30.0
+                default_hr = 140
             
             # Input fields
             if is_running:
@@ -1258,6 +1241,5 @@ elif page == "Manage Exercises":
 
 # Footer
 st.sidebar.divider()
-st.sidebar.caption("💪 Workout Tracker")
+# st.sidebar.caption("💪 Workout Tracker")
 st.sidebar.caption("Optimized for mobile")
-
