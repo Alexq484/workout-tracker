@@ -35,6 +35,11 @@ def get_db():
     """Context manager for database connections"""
     conn = psycopg2.connect(get_connection_string(), cursor_factory=RealDictCursor)
     try:
+        # Set timezone to EST for this connection
+        cursor = conn.cursor()
+        cursor.execute("SET TIME ZONE 'America/New_York'")
+        conn.commit()
+        
         yield conn
         conn.commit()
     except Exception as e:
@@ -42,7 +47,6 @@ def get_db():
         raise e
     finally:
         conn.close()
-
 def init_database():
     """Initialize database with schema"""
     with get_db() as conn:
@@ -280,15 +284,23 @@ def add_set(workout_id: int, exercise_id: int, reps: int, weight: float) -> int:
 def get_sets_for_workout(workout_id: int) -> pd.DataFrame:
     """Get all sets for a workout as DataFrame"""
     with get_db() as conn:
-        query = """
+        cursor = conn.cursor()
+        cursor.execute("""
             SELECT s.id, e.name as exercise, s.set_number, s.reps, s.weight,
                    s.created_at
             FROM sets s
             JOIN exercises e ON s.exercise_id = e.id
             WHERE s.workout_id = %s
             ORDER BY s.created_at
-        """
-        return pd.read_sql_query(query, conn, params=(workout_id,))
+        """, (workout_id,))
+        
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return pd.DataFrame()
+        
+        # Convert RealDictCursor results to DataFrame
+        return pd.DataFrame([dict(row) for row in rows])
 
 def delete_set(set_id: int):
     """Delete a specific set"""
