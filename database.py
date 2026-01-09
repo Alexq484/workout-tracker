@@ -658,8 +658,8 @@ def get_weekly_mileage() -> pd.DataFrame:
     with get_db() as conn:
         query = """
             SELECT 
-                EXTRACT(WEEK FROM w.workout_date) as week,
-                EXTRACT(YEAR FROM w.workout_date) as year,
+                EXTRACT(WEEK FROM w.workout_date)::INTEGER as week,
+                EXTRACT(YEAR FROM w.workout_date)::INTEGER as year,
                 SUM(s.reps / 10.0) as total_miles,
                 COUNT(DISTINCT w.id) as num_runs
             FROM sets s
@@ -670,8 +670,7 @@ def get_weekly_mileage() -> pd.DataFrame:
             ORDER BY year, week
         """
         df = pd.read_sql_query(query, conn)
-        df['week'] = df['week'].astype(int)
-        df['year'] = df['year'].astype(int)
+        # No need to convert - already integers from ::INTEGER cast
         return df
 
 def get_monthly_mileage() -> pd.DataFrame:
@@ -679,8 +678,8 @@ def get_monthly_mileage() -> pd.DataFrame:
     with get_db() as conn:
         query = """
             SELECT 
-                EXTRACT(MONTH FROM w.workout_date) as month,
-                EXTRACT(YEAR FROM w.workout_date) as year,
+                EXTRACT(MONTH FROM w.workout_date)::INTEGER as month,
+                EXTRACT(YEAR FROM w.workout_date)::INTEGER as year,
                 SUM(s.reps / 10.0) as total_miles,
                 COUNT(DISTINCT w.id) as num_runs
             FROM sets s
@@ -691,10 +690,8 @@ def get_monthly_mileage() -> pd.DataFrame:
             ORDER BY year, month
         """
         df = pd.read_sql_query(query, conn)
-        df['month'] = df['month'].astype(int)
-        df['year'] = df['year'].astype(int)
+        # No need to convert - already integers from ::INTEGER cast
         return df
-
 # ==================== DASHBOARD FUNCTIONS ====================
 
 def get_week_summary(start_date: str, end_date: str) -> Dict:
@@ -831,8 +828,8 @@ def get_weekly_volume_trend(weeks: int = 8) -> pd.DataFrame:
     with get_db() as conn:
         query = """
             SELECT 
-                EXTRACT(WEEK FROM w.workout_date) as week,
-                EXTRACT(YEAR FROM w.workout_date) as year,
+                EXTRACT(WEEK FROM w.workout_date)::INTEGER as week,
+                EXTRACT(YEAR FROM w.workout_date)::INTEGER as year,
                 SUM(s.reps * s.weight) as volume
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
@@ -843,6 +840,5 @@ def get_weekly_volume_trend(weeks: int = 8) -> pd.DataFrame:
             LIMIT %s
         """
         df = pd.read_sql_query(query, conn, params=(weeks,))
-        df['week'] = df['week'].astype(int)
-        df['year'] = df['year'].astype(int)
+        # No need to convert - already integers from ::INTEGER cast
         return df.sort_values(['year', 'week'])
