@@ -719,7 +719,7 @@ elif page == "Log Workout":
                 submitted = st.form_submit_button("➕ Add Set", use_container_width=True)
                 
                 if submitted:
-                    valid, error_msg = utils.valiis_running_edate_set_input(reps, weight)
+                    valid, error_msg = utils.validate_set_input(reps, weight)
                     
                     if not valid:
                         st.error(error_msg)
@@ -767,7 +767,12 @@ elif page == "Log Workout":
                 exercise_sets = sets_df[sets_df['exercise'] == exercise_name]
                 exercise_obj = db.get_exercise_by_name(exercise_name)
                 
-                is_running_exercise = exercise_obj and exercise_obj['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
+                # Skip if exercise was deleted
+                if not exercise_obj:
+                    st.warning(f"⚠️ Exercise '{exercise_name}' no longer exists")
+                    continue
+                
+                is_running_exercise = exercise_obj['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
                 
                 with st.expander(f"**{exercise_name}**", expanded=True):
                     if is_running_exercise:
@@ -782,8 +787,10 @@ elif page == "Log Workout":
                             with col1:
                                 st.write(f"**{miles:.1f} mi** • {time_min:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi" + (f" • {hr} bpm" if hr > 0 else ""))
                             with col2:
-                                if st.button("🗑️", key=f"del_set_{row['id']}", use_container_width=True):
-                                    db.delete_set(row['id'])
+                                if st.button("🗑️", key=f"del_set_{idx}", use_container_width=True):
+                                    # Get the actual id from the dataframe
+                                    set_id = exercise_sets.loc[idx, 'id']
+                                    db.delete_set(set_id)
                                     st.success("Deleted!")
                                     st.rerun()
                     else:
@@ -828,7 +835,20 @@ elif page == "Log Workout":
                         
                         if is_pr_today:
                             st.markdown('<span class="pr-badge">🏆 PR!</span>', unsafe_allow_html=True)
+# Display today's workout
+# st.divider()
+# st.subheader("Today's Sets")
 
+# sets_df = db.get_sets_for_workout(st.session_state.workout_id)
+
+# # DEBUG
+# st.write(f"DEBUG: workout_id = {st.session_state.workout_id}")
+# st.write(f"DEBUG: Number of sets = {len(sets_df)}")
+# st.write(f"DEBUG: Sets dataframe:")
+# st.dataframe(sets_df)
+
+# if sets_df.empty:
+#     st.info("No sets logged yet")
 # ==================== PR RECORDS PAGE ====================
 
 elif page == "PR Records":
