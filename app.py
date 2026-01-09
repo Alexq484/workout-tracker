@@ -719,7 +719,7 @@ elif page == "Log Workout":
                 submitted = st.form_submit_button("➕ Add Set", use_container_width=True)
                 
                 if submitted:
-                    valid, error_msg = utils.validate_set_input(reps, weight)
+                    valid, error_msg = utils.valiis_running_edate_set_input(reps, weight)
                     
                     if not valid:
                         st.error(error_msg)
@@ -767,7 +767,7 @@ elif page == "Log Workout":
                 exercise_sets = sets_df[sets_df['exercise'] == exercise_name]
                 exercise_obj = db.get_exercise_by_name(exercise_name)
                 
-                is_running_exercise = exercise_obj['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
+                is_running_exercise = exercise_obj and exercise_obj['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
                 
                 with st.expander(f"**{exercise_name}**", expanded=True):
                     if is_running_exercise:
@@ -1032,7 +1032,7 @@ elif page == "History":
                         st.markdown(f"**{exercise_name}**")
                         
                         # Check if running exercise
-                        is_running = exercise_sets[0]['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
+                        is_running = exercise_sets and len(exercise_sets) > 0 and exercise_sets[0]['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
                         
                         if is_running:
                             # Display running sets
