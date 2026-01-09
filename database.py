@@ -5,6 +5,18 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import pandas as pd
 from contextlib import contextmanager
+import pytz
+
+# Set timezone
+EST = pytz.timezone('America/New_York')
+
+def get_today():
+    """Get today's date in EST"""
+    return datetime.now(EST).date()
+
+def get_now():
+    """Get current datetime in EST"""
+    return datetime.now(EST)
 
 def get_connection_string():
     """Get PostgreSQL connection string from Streamlit secrets or environment"""
@@ -173,7 +185,7 @@ def create_workout(workout_date: str, notes: str = None) -> int:
 
 def get_or_create_todays_workout() -> int:
     """Get today's workout or create if doesn't exist"""
-    today = datetime.now().date().isoformat()
+    today = get_today().isoformat()  # Changed
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM workouts WHERE workout_date = %s", (today,))
@@ -614,7 +626,7 @@ def log_pr(exercise_id: int, pr_type: str, value: float, achieved_date: str, con
 
 def get_recent_prs(days: int = 30) -> List[Dict]:
     """Get PRs from the last N days"""
-    cutoff_date = (datetime.now() - timedelta(days=days)).date().isoformat()
+    cutoff_date = (get_now() - timedelta(days=days)).date().isoformat()  # Changed
     
     with get_db() as conn:
         cursor = conn.cursor()
@@ -753,7 +765,7 @@ def get_workout_streak() -> int:
             return 0
         
         # Check if today or yesterday has a workout
-        today = datetime.now().date()
+        today = get_today()  # Changed
         yesterday = today - timedelta(days=1)
         
         most_recent = dates[0]
@@ -793,7 +805,7 @@ def get_days_since_last_workout() -> int:
             return 999  # No workouts ever
         
         last_date = result['last_date']
-        today = datetime.now().date()
+        today = get_today()  # Changed
         
         return (today - last_date).days
 
