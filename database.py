@@ -130,7 +130,9 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_template_exercises ON template_exercises(template_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pr_exercise ON personal_records(exercise_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pr_date ON personal_records(achieved_date)")
-        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sets_created ON sets(created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workouts_date_desc ON workouts(workout_date DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sets_workout_exercise ON sets(workout_id, exercise_id)")
         conn.commit()
 
 # ==================== EXERCISES ====================
@@ -835,22 +837,53 @@ def get_category_volume_this_week(start_date: str, end_date: str) -> pd.DataFram
         """
         return pd.read_sql_query(query, conn, params=(start_date, end_date))
 
+# Replace the get_weekly_volume_trend function in database.py with this:
+
 def get_weekly_volume_trend(weeks: int = 8) -> pd.DataFrame:
     """Get weekly volume trend"""
     with get_db() as conn:
         query = """
+            WITH weekly_data AS (
+                SELECT 
+                    EXTRACT(WEEK FROM w.workout_date)::INTEGER as week,
+                    EXTRACT(YEAR FROM w.workout_date)::INTEGER as year,
+                    SUM(s.reps * s.weight) as volume,
+                    w.workout_date
+                FROM sets s
+                JOIN workouts w ON s.workout_id = w.id
+                JOIN exercises e ON s.exercise_id = e.id
+                WHERE e.category NOT IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
+                GROUP BY 
+                    EXTRACT(YEAR FROM w.workout_date), 
+                    EXTRACT(WEEK FROM w.workout_date),
+                    w.workout_date
+            )
             SELECT 
-                EXTRACT(WEEK FROM w.workout_date)::INTEGER as week,
-                EXTRACT(YEAR FROM w.workout_date)::INTEGER as year,
-                SUM(s.reps * s.weight) as volume
-            FROM sets s
-            JOIN workouts w ON s.workout_id = w.id
-            JOIN exercises e ON s.exercise_id = e.id
-            WHERE e.category NOT IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
-            GROUP BY EXTRACT(YEAR FROM w.workout_date), EXTRACT(WEEK FROM w.workout_date)
-            ORDER BY year DESC, week DESC
-            LIMIT %s
+                week,
+                year,
+                SUM(volume) as volume
+            FROM weekly_data
+            GROUP BY year, week
+            ORDER BY year ASC, week ASC
         """
-        df = pd.read_sql_query(query, conn, params=(weeks,))
-        # No need to convert - already integers from ::INTEGER cast
-        return df.sort_values(['year', 'week'])
+        df = pd.read_sql_query(query, conn)
+        
+        # Return only the last N weeks
+        if not df.empty and len(df) > weeks:
+            df = df.tail(weeks)
+        
+        return df
+    
+# ADD THIS FUNCTION TO database.py
+
+def get_workout_by_date(workout_date: str) -> Optional[Dict]:
+    """Get workout for a specific date"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM workouts WHERE workout_date = %s", (workout_date,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    
+@st.cache_data(ttl=300)
+def get_all_exercises_cached():
+    return get_all_exercises()
