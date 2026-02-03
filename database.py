@@ -54,6 +54,17 @@ def init_database():
     with get_db() as conn:
         cursor = conn.cursor()
         
+        # Create categories table (NEW)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS categories (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                user_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(name, user_id)
+            )
+        """)
+        
         # Create exercises table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS exercises (
@@ -144,7 +155,68 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_workouts_user ON workouts(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_templates_user ON templates(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_pr_user ON personal_records(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id)")
         conn.commit()
+
+# ==================== CATEGORIES ====================
+
+def add_category(name: str, user_id: int = None) -> int:
+    """Add a new category for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO categories (name, user_id) VALUES (%s, %s) RETURNING id",
+            (name.strip(), user_id)
+        )
+        return cursor.fetchone()['id']
+
+def get_all_categories(user_id: int = None) -> List[Dict]:
+    """Get all categories for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM categories WHERE user_id = %s ORDER BY name",
+            (user_id,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+def delete_category(category_id: int, user_id: int = None):
+    """Delete a category (with user verification)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM categories WHERE id = %s AND user_id = %s",
+            (category_id, user_id)
+        )
+
+def get_category_by_name(name: str, user_id: int = None) -> Optional[Dict]:
+    """Get category by name for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM categories WHERE name = %s AND user_id = %s",
+            (name, user_id)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+@st.cache_data(ttl=300)
+def get_all_categories_cached(user_id: int = None):
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    return get_all_categories(user_id)
 
 # ==================== EXERCISES ====================
 
