@@ -10,12 +10,7 @@ import utils
 import auth  # Add at top
 
 
-# In sidebar (replace footer):
-st.sidebar.divider()
-st.sidebar.caption(f"👤 {st.session_state.username}")
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    auth.logout()
-    st.rerun()
+
 
 # Set timezone to EST
 EST = pytz.timezone('America/New_York')
@@ -1364,5 +1359,6 @@ st.sidebar.caption(f"👤 {st.session_state.username}")
 if st.sidebar.button("🚪 Logout", use_container_width=True):
     auth.logout()
     st.rerun()
+
 
 
