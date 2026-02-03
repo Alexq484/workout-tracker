@@ -7,6 +7,19 @@ import pytz
 
 import database as db
 import utils
+import auth  # Add at top
+
+# After st.set_page_config():
+auth.init_session_state()
+auth.init_auth_tables()
+auth.require_auth()
+
+# In sidebar (replace footer):
+st.sidebar.divider()
+st.sidebar.caption(f"👤 {st.session_state.username}")
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    auth.logout()
+    st.rerun()
 
 # Set timezone to EST
 EST = pytz.timezone('America/New_York')
@@ -1348,3 +1361,4 @@ elif page == "Manage Exercises":
 # Footer
 st.sidebar.divider()
 st.sidebar.caption("Optimized for mobile")
+
