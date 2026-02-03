@@ -7,10 +7,6 @@ import pytz
 
 import database as db
 import utils
-import auth  # Add at top
-
-
-
 
 # Set timezone to EST
 EST = pytz.timezone('America/New_York')
@@ -30,10 +26,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-# After st.set_page_config():
-auth.init_session_state()
-auth.init_auth_tables()
-auth.require_auth()
 
 # Initialize database
 db.init_database()
@@ -338,6 +330,17 @@ def get_active_categories():
     df = pd.DataFrame(all_exercises)
     return df['category'].unique().tolist()
 
+def get_user_categories():
+    """Get user's defined categories"""
+    categories = db.get_all_categories_cached()
+    return [c['name'] for c in categories]
+
+def is_running_category(category: str) -> bool:
+    """Check if a category is a running category (for special handling)"""
+    running_keywords = ['run', 'running', 'cardio', 'jog', 'jogging']
+    category_lower = category.lower()
+    return any(keyword in category_lower for keyword in running_keywords)
+
 def calculate_estimated_1rm(weight: float, reps: int) -> float:
     """Calculate estimated 1RM using Epley formula"""
     if reps == 1:
@@ -595,32 +598,25 @@ elif page == "Log Workout":
             # Quick Start
             st.subheader("🚀 Quick Start")
             
-            ordered_categories = [
-                ("Lower Strength", "Mon - Lower"),
-                ("Easy Run", "Tue - Easy Run"),
-                ("Upper Strength", "Wed - Upper"),
-                ("Tempo Run", "Thu - Tempo"),
-                ("Lower Volume / Hypertrophy", "Fri - Lower Vol"),
-                ("Upper Volume / Hypertrophy", "Sat - Upper Vol"),
-                ("Long Easy Run", "Sun - Long Run"),
-            ]
+            # Get user's categories
+            user_categories = db.get_all_categories_cached()
             
-            available_categories = [
-                (cat, label) for cat, label in ordered_categories 
-                if cat in active_categories
-            ]
-            
-            if available_categories:
+            if user_categories:
+                # Display category buttons dynamically based on user's categories
                 num_cols = 2
-                for i in range(0, len(available_categories), num_cols):
+                category_names = [c['name'] for c in user_categories]
+                
+                for i in range(0, len(category_names), num_cols):
                     cols = st.columns(num_cols)
                     
-                    for idx, (category, label) in enumerate(available_categories[i:i+num_cols]):
+                    for idx, category_name in enumerate(category_names[i:i+num_cols]):
                         with cols[idx]:
-                            if st.button(label, key=f"cat_{category}", use_container_width=True):
-                                st.session_state.selected_category = category
-                                st.success(f"✓ {category}")
+                            if st.button(category_name, key=f"cat_{category_name}", use_container_width=True):
+                                st.session_state.selected_category = category_name
+                                st.success(f"✓ {category_name}")
                                 st.rerun()
+            else:
+                st.info("💡 No categories yet. Go to ⚙️ Manage Exercises to create your workout splits!")
             
             # Show selected category
             if st.session_state.selected_category:
@@ -1308,22 +1304,99 @@ elif page == "Progress":
 
 # ==================== MANAGE EXERCISES PAGE ====================
 
+# ==================== MANAGE EXERCISES PAGE ====================
+# THIS REPLACES THE ENTIRE "Manage Exercises" elif section
+# Find: elif page == "Manage Exercises":
+# Delete everything up to the next elif or the sidebar footer
+# Replace with this:
+
 elif page == "Manage Exercises":
     st.title("⚙️ Manage Exercises")
     
+    # ==================== MANAGE CATEGORIES SECTION ====================
+    st.subheader("📂 Manage Categories")
+    
+    # Add new category
+    with st.form("add_category"):
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            new_category_name = st.text_input("New Category Name", placeholder="e.g., Push Day, Pull Day, Legs")
+        with col2:
+            st.write("")  # Spacing
+            st.write("")  # Spacing
+            add_category_btn = st.form_submit_button("➕ Add Category", use_container_width=True)
+        
+        if add_category_btn:
+            if not new_category_name:
+                st.error("Please enter a category name")
+            else:
+                existing_category = db.get_category_by_name(new_category_name)
+                if existing_category:
+                    st.error("Category already exists")
+                else:
+                    db.add_category(new_category_name)
+                    st.success(f"Added category: {new_category_name}")
+                    st.rerun()
+    
+    # Display existing categories
+    categories = db.get_all_categories_cached()
+    
+    if categories:
+        st.write("**Your Categories:**")
+        
+        # Create a grid of category chips with delete buttons
+        num_cols = 3
+        for i in range(0, len(categories), num_cols):
+            cols = st.columns(num_cols)
+            for idx, category in enumerate(categories[i:i+num_cols]):
+                with cols[idx]:
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"📁 {category['name']}")
+                    with col2:
+                        if st.button("🗑️", key=f"del_cat_{category['id']}", use_container_width=True):
+                            # Check if any exercises use this category
+                            exercises = db.get_all_exercises_cached()
+                            category_in_use = any(e['category'] == category['name'] for e in exercises)
+                            
+                            if category_in_use:
+                                st.error(f"Cannot delete '{category['name']}' - exercises are using it")
+                            else:
+                                db.delete_category(category['id'])
+                                st.success(f"Deleted category: {category['name']}")
+                                st.rerun()
+    else:
+        st.info("No categories yet. Add your first category above!")
+    
+    st.divider()
+    
+    # ==================== MANAGE EXERCISES SECTION ====================
+    st.subheader("💪 Manage Exercises")
+    
+    # Add new exercise
     with st.form("add_exercise"):
-        st.subheader("Add Exercise")
+        st.write("**Add New Exercise**")
         
-        new_exercise_name = st.text_input("Name")
-        new_category = st.selectbox("Category", utils.CATEGORIES)
+        new_exercise_name = st.text_input("Exercise Name", placeholder="e.g., Bench Press, Squats")
         
-        if st.form_submit_button("➕ Add", use_container_width=True):
+        # Get categories for dropdown
+        category_names = [c['name'] for c in categories] if categories else []
+        
+        if not category_names:
+            st.warning("⚠️ Please add at least one category first")
+            new_category = None
+        else:
+            new_category = st.selectbox("Category", category_names)
+        
+        if st.form_submit_button("➕ Add Exercise", use_container_width=True):
             if not new_exercise_name:
-                st.error("Enter a name")
+                st.error("Please enter an exercise name")
+            elif not category_names:
+                st.error("Please create a category first")
             else:
                 existing = db.get_exercise_by_name(new_exercise_name)
                 if existing:
-                    st.error("Already exists")
+                    st.error("Exercise already exists")
                 else:
                     db.add_exercise(new_exercise_name, new_category)
                     st.success(f"Added {new_exercise_name}")
@@ -1331,34 +1404,46 @@ elif page == "Manage Exercises":
     
     st.divider()
     
+    # Display exercises grouped by category
     st.subheader("Your Exercises")
     exercises = db.get_all_exercises_cached()
     
     if not exercises:
-        st.info("No exercises yet")
+        st.info("No exercises yet. Add your first exercise above!")
     else:
+        # Group exercises by category
         df = pd.DataFrame(exercises)
         
-        for category in utils.CATEGORIES:
+        for category in category_names:
             category_exercises = df[df['category'] == category]
             
             if not category_exercises.empty:
-                with st.expander(f"{category} ({len(category_exercises)})"):
+                with st.expander(f"📁 {category} ({len(category_exercises)})", expanded=True):
                     for _, exercise in category_exercises.iterrows():
-                        col1, col2 = st.columns([3, 1])
+                        col1, col2 = st.columns([4, 1])
                         with col1:
                             st.write(f"• {exercise['name']}")
                         with col2:
-                            if st.button("🗑️", key=f"del_{exercise['id']}", use_container_width=True):
+                            if st.button("🗑️", key=f"del_ex_{exercise['id']}", use_container_width=True):
                                 db.delete_exercise(exercise['id'])
+                                st.success(f"Deleted {exercise['name']}")
                                 st.rerun()
+        
+        # Show exercises with no category or deleted category
+        orphaned_exercises = df[~df['category'].isin(category_names)]
+        if not orphaned_exercises.empty:
+            with st.expander(f"⚠️ Uncategorized ({len(orphaned_exercises)})", expanded=False):
+                st.warning("These exercises have invalid categories. Consider deleting them.")
+                for _, exercise in orphaned_exercises.iterrows():
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.write(f"• {exercise['name']} (Category: {exercise['category']})")
+                    with col2:
+                        if st.button("🗑️", key=f"del_ex_orphan_{exercise['id']}", use_container_width=True):
+                            db.delete_exercise(exercise['id'])
+                            st.success(f"Deleted {exercise['name']}")
+                            st.rerun()
 
-# In sidebar (replace footer):
+# Footer
 st.sidebar.divider()
-st.sidebar.caption(f"👤 {st.session_state.username}")
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    auth.logout()
-    st.rerun()
-
-
-
+st.sidebar.caption("Optimized for mobile")
