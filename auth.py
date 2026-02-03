@@ -56,6 +56,33 @@ def init_auth_tables():
             )
         """)
         
+        # Check if users table exists and if email column needs to be made nullable
+        cursor.execute("""
+            SELECT column_name, is_nullable
+            FROM information_schema.columns 
+            WHERE table_name='users' AND column_name='email'
+        """)
+        
+        email_col = cursor.fetchone()
+        if email_col and email_col['is_nullable'] == 'NO':
+            # Make email nullable and remove UNIQUE constraint if it exists
+            try:
+                cursor.execute("ALTER TABLE users ALTER COLUMN email DROP NOT NULL")
+                # Try to drop the unique constraint on email (may not exist)
+                cursor.execute("""
+                    DO $$ 
+                    BEGIN
+                        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
+                    EXCEPTION
+                        WHEN undefined_object THEN NULL;
+                    END $$;
+                """)
+                conn.commit()
+            except Exception as alter_error:
+                # If alter fails, continue - might already be nullable
+                conn.rollback()
+                pass
+        
         # Add user_id column to existing tables if they don't have it
         # Check if column exists first
         cursor.execute("""
