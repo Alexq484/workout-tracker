@@ -2,16 +2,6 @@ from datetime import datetime, timedelta
 from typing import List
 
 # Updated categories to match your workout split + running workouts
-CATEGORIES = [
-    "Lower Strength",
-    "Upper Strength", 
-    "Lower Volume / Hypertrophy",
-    "Upper Volume / Hypertrophy",
-    "Easy Run",
-    "Tempo Run",
-    "Long Easy Run",
-    "Other"
-]
 
 def format_date(date_str: str) -> str:
     """Format ISO date to readable format"""
@@ -37,4 +27,5 @@ def validate_set_input(reps: int, weight: float) -> tuple[bool, str]:
         return False, "Reps seems too high (>100)"
     if weight > 1000:
         return False, "Weight seems too high (>1000)"
+
     return True, ""
