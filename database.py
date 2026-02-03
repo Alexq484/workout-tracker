@@ -6,6 +6,7 @@ from typing import List, Dict, Optional
 import pandas as pd
 from contextlib import contextmanager
 import pytz
+import auth  # <-- ADDED FOR AUTHENTICATION
 
 # Set timezone
 EST = pytz.timezone('America/New_York')
@@ -47,6 +48,7 @@ def get_db():
         raise e
     finally:
         conn.close()
+
 def init_database():
     """Initialize database with schema"""
     with get_db() as conn:
@@ -56,9 +58,11 @@ def init_database():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS exercises (
                 id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
                 category TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                user_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(name, user_id)
             )
         """)
         
@@ -68,6 +72,7 @@ def init_database():
                 id SERIAL PRIMARY KEY,
                 workout_date DATE NOT NULL,
                 notes TEXT,
+                user_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -93,6 +98,7 @@ def init_database():
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 day_of_week TEXT,
+                user_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -118,6 +124,7 @@ def init_database():
                 value REAL NOT NULL,
                 achieved_date DATE NOT NULL,
                 context TEXT,
+                user_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (exercise_id) REFERENCES exercises(id)
             )
@@ -133,40 +140,65 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sets_created ON sets(created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_workouts_date_desc ON workouts(workout_date DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sets_workout_exercise ON sets(workout_id, exercise_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_exercises_user ON exercises(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_workouts_user ON workouts(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_templates_user ON templates(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pr_user ON personal_records(user_id)")
         conn.commit()
 
 # ==================== EXERCISES ====================
 
-def add_exercise(name: str, category: str = None) -> int:
-    """Add a new exercise"""
+def add_exercise(name: str, category: str = None, user_id: int = None) -> int:
+    """Add a new exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO exercises (name, category) VALUES (%s, %s) RETURNING id",
-            (name.strip(), category)
+            "INSERT INTO exercises (name, category, user_id) VALUES (%s, %s, %s) RETURNING id",
+            (name.strip(), category, user_id)
         )
         return cursor.fetchone()['id']
 
-def get_all_exercises() -> List[Dict]:
-    """Get all exercises"""
+def get_all_exercises(user_id: int = None) -> List[Dict]:
+    """Get all exercises for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM exercises ORDER BY name")
+        cursor.execute(
+            "SELECT * FROM exercises WHERE user_id = %s ORDER BY name",
+            (user_id,)
+        )
         return [dict(row) for row in cursor.fetchall()]
 
-def get_exercise_by_name(name: str) -> Optional[Dict]:
-    """Get exercise by name"""
+def get_exercise_by_name(name: str, user_id: int = None) -> Optional[Dict]:
+    """Get exercise by name for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM exercises WHERE name = %s", (name,))
+        cursor.execute(
+            "SELECT * FROM exercises WHERE name = %s AND user_id = %s",
+            (name, user_id)
+        )
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def delete_exercise(exercise_id: int):
-    """Delete an exercise"""
+def delete_exercise(exercise_id: int, user_id: int = None):
+    """Delete an exercise (with user verification)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM exercises WHERE id = %s", (exercise_id,))
+        cursor.execute(
+            "DELETE FROM exercises WHERE id = %s AND user_id = %s",
+            (exercise_id, user_id)
+        )
 
 def update_set(set_id: int, reps: int, weight: float):
     """Update a specific set's reps and weight"""
@@ -179,41 +211,54 @@ def update_set(set_id: int, reps: int, weight: float):
 
 # ==================== WORKOUTS ====================
 
-def create_workout(workout_date: str, notes: str = None) -> int:
-    """Create a new workout session"""
+def create_workout(workout_date: str, notes: str = None, user_id: int = None) -> int:
+    """Create a new workout session for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO workouts (workout_date, notes) VALUES (%s, %s) RETURNING id",
-            (workout_date, notes)
+            "INSERT INTO workouts (workout_date, notes, user_id) VALUES (%s, %s, %s) RETURNING id",
+            (workout_date, notes, user_id)
         )
         return cursor.fetchone()['id']
 
-def get_or_create_todays_workout() -> int:
-    """Get today's workout or create if doesn't exist"""
-    today = get_today().isoformat()  # Changed
+def get_or_create_todays_workout(user_id: int = None) -> int:
+    """Get today's workout or create if doesn't exist for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
+    today = get_today().isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM workouts WHERE workout_date = %s", (today,))
+        cursor.execute(
+            "SELECT id FROM workouts WHERE workout_date = %s AND user_id = %s",
+            (today, user_id)
+        )
         row = cursor.fetchone()
         
         if row:
             return row['id']
         else:
-            return create_workout(today)
+            return create_workout(today, user_id=user_id)
 
-def get_workouts_by_date_range(start_date: str, end_date: str) -> List[Dict]:
-    """Get workouts within date range (only those with sets)"""
+def get_workouts_by_date_range(start_date: str, end_date: str, user_id: int = None) -> List[Dict]:
+    """Get workouts within date range for a specific user (only those with sets)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT w.* FROM workouts w
             WHERE w.workout_date BETWEEN %s AND %s
+            AND w.user_id = %s
             AND EXISTS (
                 SELECT 1 FROM sets s WHERE s.workout_id = w.id
             )
             ORDER BY w.workout_date DESC
-        """, (start_date, end_date))
+        """, (start_date, end_date, user_id))
         return [dict(row) for row in cursor.fetchall()]
 
 def get_workout_details(workout_id: int) -> Dict:
@@ -312,47 +357,58 @@ def delete_set(set_id: int):
 
 # ==================== PROGRESS ====================
 
-def get_exercise_progress(exercise_id: int, limit: int = 100) -> pd.DataFrame:
-    """Get historical data for an exercise"""
+def get_exercise_progress(exercise_id: int, limit: int = 100, user_id: int = None) -> pd.DataFrame:
+    """Get historical data for an exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         query = """
             SELECT w.workout_date, s.set_number, s.reps, s.weight,
                    (s.reps * s.weight) as volume
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
             ORDER BY w.workout_date DESC, s.set_number
             LIMIT %s
         """
-        return pd.read_sql_query(query, conn, params=(exercise_id, limit))
+        return pd.read_sql_query(query, conn, params=(exercise_id, user_id, limit))
 
-def get_exercise_stats(exercise_id: int) -> Dict:
-    """Get summary stats for an exercise"""
+def get_exercise_stats(exercise_id: int, user_id: int = None) -> Dict:
+    """Get summary stats for an exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT 
-                COUNT(DISTINCT workout_id) as total_workouts,
+                COUNT(DISTINCT s.workout_id) as total_workouts,
                 COUNT(*) as total_sets,
-                MAX(weight) as max_weight,
-                AVG(reps) as avg_reps,
-                MAX(reps * weight) as max_volume
-            FROM sets
-            WHERE exercise_id = %s
-        """, (exercise_id,))
+                MAX(s.weight) as max_weight,
+                AVG(s.reps) as avg_reps,
+                MAX(s.reps * s.weight) as max_volume
+            FROM sets s
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
+        """, (exercise_id, user_id))
         
         row = cursor.fetchone()
         return dict(row) if row else {}
 
 # ==================== WORKOUT TEMPLATES ====================
 
-def create_template(name: str, day_of_week: str = None) -> int:
-    """Create a workout template"""
+def create_template(name: str, day_of_week: str = None, user_id: int = None) -> int:
+    """Create a workout template for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO templates (name, day_of_week) VALUES (%s, %s) RETURNING id",
-            (name, day_of_week)
+            "INSERT INTO templates (name, day_of_week, user_id) VALUES (%s, %s, %s) RETURNING id",
+            (name, day_of_week, user_id)
         )
         return cursor.fetchone()['id']
 
@@ -365,11 +421,17 @@ def add_exercise_to_template(template_id: int, exercise_id: int, order: int = 0)
             (template_id, exercise_id, order)
         )
 
-def get_all_templates() -> List[Dict]:
-    """Get all templates"""
+def get_all_templates(user_id: int = None) -> List[Dict]:
+    """Get all templates for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM templates ORDER BY name")
+        cursor.execute(
+            "SELECT * FROM templates WHERE user_id = %s ORDER BY name",
+            (user_id,)
+        )
         return [dict(row) for row in cursor.fetchall()]
 
 def get_template_exercises(template_id: int) -> List[Dict]:
@@ -385,16 +447,25 @@ def get_template_exercises(template_id: int) -> List[Dict]:
         """, (template_id,))
         return [dict(row) for row in cursor.fetchall()]
 
-def delete_template(template_id: int):
-    """Delete a template"""
+def delete_template(template_id: int, user_id: int = None):
+    """Delete a template (with user verification)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM templates WHERE id = %s", (template_id,))
+        cursor.execute(
+            "DELETE FROM templates WHERE id = %s AND user_id = %s",
+            (template_id, user_id)
+        )
 
 # ==================== PREVIOUS SESSION DATA ====================
 
-def get_last_workout_for_exercise(exercise_id: int, before_date: str = None) -> Optional[Dict]:
-    """Get the most recent workout data for an exercise"""
+def get_last_workout_for_exercise(exercise_id: int, before_date: str = None, user_id: int = None) -> Optional[Dict]:
+    """Get the most recent workout data for an exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
@@ -403,19 +474,21 @@ def get_last_workout_for_exercise(exercise_id: int, before_date: str = None) -> 
                 SELECT w.workout_date, s.set_number, s.reps, s.weight
                 FROM sets s
                 JOIN workouts w ON s.workout_id = w.id
-                WHERE s.exercise_id = %s AND w.workout_date < %s
+                JOIN exercises e ON s.exercise_id = e.id
+                WHERE s.exercise_id = %s AND w.workout_date < %s AND e.user_id = %s
                 ORDER BY w.workout_date DESC, s.set_number
                 LIMIT 10
-            """, (exercise_id, before_date))
+            """, (exercise_id, before_date, user_id))
         else:
             cursor.execute("""
                 SELECT w.workout_date, s.set_number, s.reps, s.weight
                 FROM sets s
                 JOIN workouts w ON s.workout_id = w.id
-                WHERE s.exercise_id = %s
+                JOIN exercises e ON s.exercise_id = e.id
+                WHERE s.exercise_id = %s AND e.user_id = %s
                 ORDER BY w.workout_date DESC, s.set_number
                 LIMIT 10
-            """, (exercise_id,))
+            """, (exercise_id, user_id))
         
         rows = cursor.fetchall()
         if not rows:
@@ -426,45 +499,51 @@ def get_last_workout_for_exercise(exercise_id: int, before_date: str = None) -> 
             'sets': [dict(row) for row in rows]
         }
 
-def get_exercise_pr(exercise_id: int) -> Dict:
-    """Get personal records for an exercise"""
+def get_exercise_pr(exercise_id: int, user_id: int = None) -> Dict:
+    """Get personal records for an exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
         # Max weight
         cursor.execute("""
-            SELECT MAX(weight) as max_weight, w.workout_date
+            SELECT MAX(s.weight) as max_weight, w.workout_date
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
             GROUP BY s.exercise_id, w.workout_date
             ORDER BY max_weight DESC
             LIMIT 1
-        """, (exercise_id,))
+        """, (exercise_id, user_id))
         max_weight_row = cursor.fetchone()
         
         # Max volume in single workout
         cursor.execute("""
-            SELECT SUM(reps * weight) as max_volume, w.workout_date
+            SELECT SUM(s.reps * s.weight) as max_volume, w.workout_date
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
             GROUP BY s.workout_id, w.workout_date
             ORDER BY max_volume DESC
             LIMIT 1
-        """, (exercise_id,))
+        """, (exercise_id, user_id))
         max_volume_row = cursor.fetchone()
         
         # Max reps at any weight
         cursor.execute("""
-            SELECT MAX(reps) as max_reps, weight, w.workout_date
+            SELECT MAX(s.reps) as max_reps, s.weight, w.workout_date
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s
-            GROUP BY weight, w.workout_date
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
+            GROUP BY s.weight, w.workout_date
             ORDER BY max_reps DESC
             LIMIT 1
-        """, (exercise_id,))
+        """, (exercise_id, user_id))
         max_reps_row = cursor.fetchone()
         
         return {
@@ -473,18 +552,22 @@ def get_exercise_pr(exercise_id: int) -> Dict:
             'max_reps': dict(max_reps_row) if max_reps_row else None
         }
 
-def check_if_pr(exercise_id: int, weight: float, reps: int, workout_date: str) -> Dict:
-    """Check if current set is a PR"""
+def check_if_pr(exercise_id: int, weight: float, reps: int, workout_date: str, user_id: int = None) -> Dict:
+    """Check if current set is a PR for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
         # Check max weight PR
         cursor.execute("""
-            SELECT MAX(weight) as prev_max
+            SELECT MAX(s.weight) as prev_max
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s AND w.workout_date < %s
-        """, (exercise_id, workout_date))
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND w.workout_date < %s AND e.user_id = %s
+        """, (exercise_id, workout_date, user_id))
         
         result = cursor.fetchone()
         prev_max = result['prev_max'] if result and result['prev_max'] else 0
@@ -495,11 +578,12 @@ def check_if_pr(exercise_id: int, weight: float, reps: int, workout_date: str) -
         current_1rm = weight * (1 + reps / 30.0) if reps > 1 else weight
         
         cursor.execute("""
-            SELECT MAX(weight * (1 + reps / 30.0)) as prev_1rm
+            SELECT MAX(s.weight * (1 + s.reps / 30.0)) as prev_1rm
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s AND w.workout_date < %s
-        """, (exercise_id, workout_date))
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND w.workout_date < %s AND e.user_id = %s
+        """, (exercise_id, workout_date, user_id))
         
         result = cursor.fetchone()
         prev_1rm = result['prev_1rm'] if result and result['prev_1rm'] else 0
@@ -530,8 +614,11 @@ def update_last_set_hr(workout_id: int, exercise_id: int, heart_rate: int):
             )
         """, (heart_rate, workout_id, exercise_id))
 
-def get_running_stats(exercise_id: int) -> pd.DataFrame:
-    """Get running-specific stats for an exercise"""
+def get_running_stats(exercise_id: int, user_id: int = None) -> pd.DataFrame:
+    """Get running-specific stats for an exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         query = """
             SELECT 
@@ -542,14 +629,18 @@ def get_running_stats(exercise_id: int) -> pd.DataFrame:
                 s.set_number as heart_rate
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
             ORDER BY w.workout_date DESC
             LIMIT 100
         """
-        return pd.read_sql_query(query, conn, params=(exercise_id,))
+        return pd.read_sql_query(query, conn, params=(exercise_id, user_id))
 
-def check_running_pr(exercise_id: int, miles: float, time_minutes: float, workout_date: str) -> Dict:
-    """Check if current run is a PR"""
+def check_running_pr(exercise_id: int, miles: float, time_minutes: float, workout_date: str, user_id: int = None) -> Dict:
+    """Check if current run is a PR for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
@@ -560,8 +651,9 @@ def check_running_pr(exercise_id: int, miles: float, time_minutes: float, workou
             SELECT MIN(s.weight / (s.reps / 10.0)) as best_pace
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s AND w.workout_date < %s
-        """, (exercise_id, workout_date))
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND w.workout_date < %s AND e.user_id = %s
+        """, (exercise_id, workout_date, user_id))
         
         result = cursor.fetchone()
         prev_best_pace = result['best_pace'] if result and result['best_pace'] else 999
@@ -573,8 +665,9 @@ def check_running_pr(exercise_id: int, miles: float, time_minutes: float, workou
             SELECT MAX(s.reps / 10.0) as max_distance
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s AND w.workout_date < %s
-        """, (exercise_id, workout_date))
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND w.workout_date < %s AND e.user_id = %s
+        """, (exercise_id, workout_date, user_id))
         
         result = cursor.fetchone()
         prev_max_distance = result['max_distance'] if result and result['max_distance'] else 0
@@ -588,8 +681,11 @@ def check_running_pr(exercise_id: int, miles: float, time_minutes: float, workou
             'previous_max_distance': prev_max_distance
         }
 
-def get_running_prs(exercise_id: int) -> Dict:
-    """Get running PRs for an exercise"""
+def get_running_prs(exercise_id: int, user_id: int = None) -> Dict:
+    """Get running PRs for an exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
@@ -601,11 +697,12 @@ def get_running_prs(exercise_id: int) -> Dict:
                 s.reps / 10.0 as miles
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
             GROUP BY w.workout_date, s.reps
             ORDER BY pace ASC
             LIMIT 1
-        """, (exercise_id,))
+        """, (exercise_id, user_id))
         fastest_pace = cursor.fetchone()
         
         # Longest distance
@@ -615,11 +712,12 @@ def get_running_prs(exercise_id: int) -> Dict:
                 w.workout_date as date
             FROM sets s
             JOIN workouts w ON s.workout_id = w.id
-            WHERE s.exercise_id = %s
+            JOIN exercises e ON s.exercise_id = e.id
+            WHERE s.exercise_id = %s AND e.user_id = %s
             GROUP BY w.workout_date
             ORDER BY miles DESC
             LIMIT 1
-        """, (exercise_id,))
+        """, (exercise_id, user_id))
         longest_distance = cursor.fetchone()
         
         return {
@@ -629,18 +727,24 @@ def get_running_prs(exercise_id: int) -> Dict:
 
 # ==================== PR TRACKING ====================
 
-def log_pr(exercise_id: int, pr_type: str, value: float, achieved_date: str, context: str = None):
-    """Log a new personal record"""
+def log_pr(exercise_id: int, pr_type: str, value: float, achieved_date: str, context: str = None, user_id: int = None):
+    """Log a new personal record for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO personal_records (exercise_id, pr_type, value, achieved_date, context)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (exercise_id, pr_type, value, achieved_date, context))
+            INSERT INTO personal_records (exercise_id, pr_type, value, achieved_date, context, user_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (exercise_id, pr_type, value, achieved_date, context, user_id))
 
-def get_recent_prs(days: int = 30) -> List[Dict]:
-    """Get PRs from the last N days"""
-    cutoff_date = (get_now() - timedelta(days=days)).date().isoformat()  # Changed
+def get_recent_prs(days: int = 30, user_id: int = None) -> List[Dict]:
+    """Get PRs from the last N days for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
+    cutoff_date = (get_now() - timedelta(days=days)).date().isoformat()
     
     with get_db() as conn:
         cursor = conn.cursor()
@@ -648,27 +752,33 @@ def get_recent_prs(days: int = 30) -> List[Dict]:
             SELECT pr.*, e.name as exercise_name
             FROM personal_records pr
             JOIN exercises e ON pr.exercise_id = e.id
-            WHERE pr.achieved_date >= %s
+            WHERE pr.achieved_date >= %s AND pr.user_id = %s
             ORDER BY pr.achieved_date DESC
-        """, (cutoff_date,))
+        """, (cutoff_date, user_id))
         
         return [dict(row) for row in cursor.fetchall()]
 
-def get_pr_history(exercise_id: int) -> pd.DataFrame:
-    """Get PR history for an exercise"""
+def get_pr_history(exercise_id: int, user_id: int = None) -> pd.DataFrame:
+    """Get PR history for an exercise for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         query = """
             SELECT pr_type, value, achieved_date, context
             FROM personal_records
-            WHERE exercise_id = %s
+            WHERE exercise_id = %s AND user_id = %s
             ORDER BY achieved_date ASC
         """
-        return pd.read_sql_query(query, conn, params=(exercise_id,))
+        return pd.read_sql_query(query, conn, params=(exercise_id, user_id))
 
 # ==================== WEEKLY MILEAGE TRACKING ====================
 
-def get_weekly_mileage() -> pd.DataFrame:
-    """Get weekly running mileage totals (only workouts with sets)"""
+def get_weekly_mileage(user_id: int = None) -> pd.DataFrame:
+    """Get weekly running mileage totals for a specific user (only workouts with sets)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         query = """
             SELECT 
@@ -680,15 +790,18 @@ def get_weekly_mileage() -> pd.DataFrame:
             JOIN workouts w ON s.workout_id = w.id
             JOIN exercises e ON s.exercise_id = e.id
             WHERE e.category IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
+            AND e.user_id = %s
             GROUP BY EXTRACT(YEAR FROM w.workout_date), EXTRACT(WEEK FROM w.workout_date)
             ORDER BY year, week
         """
-        df = pd.read_sql_query(query, conn)
-        # No need to convert - already integers from ::INTEGER cast
+        df = pd.read_sql_query(query, conn, params=(user_id,))
         return df
 
-def get_monthly_mileage() -> pd.DataFrame:
-    """Get monthly running mileage totals (only workouts with sets)"""
+def get_monthly_mileage(user_id: int = None) -> pd.DataFrame:
+    """Get monthly running mileage totals for a specific user (only workouts with sets)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         query = """
             SELECT 
@@ -700,16 +813,20 @@ def get_monthly_mileage() -> pd.DataFrame:
             JOIN workouts w ON s.workout_id = w.id
             JOIN exercises e ON s.exercise_id = e.id
             WHERE e.category IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
+            AND e.user_id = %s
             GROUP BY EXTRACT(YEAR FROM w.workout_date), EXTRACT(MONTH FROM w.workout_date)
             ORDER BY year, month
         """
-        df = pd.read_sql_query(query, conn)
-        # No need to convert - already integers from ::INTEGER cast
+        df = pd.read_sql_query(query, conn, params=(user_id,))
         return df
+
 # ==================== DASHBOARD FUNCTIONS ====================
 
-def get_week_summary(start_date: str, end_date: str) -> Dict:
-    """Get summary stats for a week (only counts workouts with sets)"""
+def get_week_summary(start_date: str, end_date: str, user_id: int = None) -> Dict:
+    """Get summary stats for a week for a specific user (only counts workouts with sets)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
@@ -721,7 +838,8 @@ def get_week_summary(start_date: str, end_date: str) -> Dict:
             JOIN exercises e ON s.exercise_id = e.id
             WHERE w.workout_date BETWEEN %s AND %s
             AND e.category NOT IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
-        """, (start_date, end_date))
+            AND e.user_id = %s
+        """, (start_date, end_date, user_id))
         volume_result = cursor.fetchone()
         total_volume = volume_result['total_volume'] if volume_result else 0
         
@@ -733,7 +851,8 @@ def get_week_summary(start_date: str, end_date: str) -> Dict:
             JOIN exercises e ON s.exercise_id = e.id
             WHERE w.workout_date BETWEEN %s AND %s
             AND e.category IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
-        """, (start_date, end_date))
+            AND e.user_id = %s
+        """, (start_date, end_date, user_id))
         miles_result = cursor.fetchone()
         total_miles = miles_result['total_miles'] if miles_result else 0
         
@@ -742,10 +861,11 @@ def get_week_summary(start_date: str, end_date: str) -> Dict:
             SELECT COUNT(DISTINCT w.id) as num_workouts
             FROM workouts w
             WHERE w.workout_date BETWEEN %s AND %s
+            AND w.user_id = %s
             AND EXISTS (
                 SELECT 1 FROM sets s WHERE s.workout_id = w.id
             )
-        """, (start_date, end_date))
+        """, (start_date, end_date, user_id))
         workout_result = cursor.fetchone()
         num_workouts = workout_result['num_workouts'] if workout_result else 0
         
@@ -755,8 +875,11 @@ def get_week_summary(start_date: str, end_date: str) -> Dict:
             'num_workouts': num_workouts
         }
 
-def get_workout_streak() -> int:
-    """Calculate current workout streak (consecutive days with workouts that have sets)"""
+def get_workout_streak(user_id: int = None) -> int:
+    """Calculate current workout streak for a specific user (consecutive days with workouts that have sets)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
@@ -764,11 +887,12 @@ def get_workout_streak() -> int:
         cursor.execute("""
             SELECT DISTINCT w.workout_date
             FROM workouts w
-            WHERE EXISTS (
+            WHERE w.user_id = %s
+            AND EXISTS (
                 SELECT 1 FROM sets s WHERE s.workout_id = w.id
             )
             ORDER BY w.workout_date DESC
-        """)
+        """, (user_id,))
         
         dates = [row['workout_date'] for row in cursor.fetchall()]
         
@@ -776,7 +900,7 @@ def get_workout_streak() -> int:
             return 0
         
         # Check if today or yesterday has a workout
-        today = get_today()  # Changed
+        today = get_today()
         yesterday = today - timedelta(days=1)
         
         most_recent = dates[0]
@@ -797,18 +921,22 @@ def get_workout_streak() -> int:
         
         return streak
 
-def get_days_since_last_workout() -> int:
-    """Get number of days since last workout (with sets)"""
+def get_days_since_last_workout(user_id: int = None) -> int:
+    """Get number of days since last workout for a specific user (with sets)"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
         
         cursor.execute("""
             SELECT MAX(w.workout_date) as last_date
             FROM workouts w
-            WHERE EXISTS (
+            WHERE w.user_id = %s
+            AND EXISTS (
                 SELECT 1 FROM sets s WHERE s.workout_id = w.id
             )
-        """)
+        """, (user_id,))
         
         result = cursor.fetchone()
         
@@ -816,12 +944,15 @@ def get_days_since_last_workout() -> int:
             return 999  # No workouts ever
         
         last_date = result['last_date']
-        today = get_today()  # Changed
+        today = get_today()
         
         return (today - last_date).days
 
-def get_category_volume_this_week(start_date: str, end_date: str) -> pd.DataFrame:
-    """Get volume by category for this week"""
+def get_category_volume_this_week(start_date: str, end_date: str, user_id: int = None) -> pd.DataFrame:
+    """Get volume by category for this week for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         query = """
             SELECT 
@@ -832,15 +963,17 @@ def get_category_volume_this_week(start_date: str, end_date: str) -> pd.DataFram
             JOIN exercises e ON s.exercise_id = e.id
             WHERE w.workout_date BETWEEN %s AND %s
             AND e.category NOT IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
+            AND e.user_id = %s
             GROUP BY e.category
             ORDER BY volume DESC
         """
-        return pd.read_sql_query(query, conn, params=(start_date, end_date))
+        return pd.read_sql_query(query, conn, params=(start_date, end_date, user_id))
 
-# Replace the get_weekly_volume_trend function in database.py with this:
-
-def get_weekly_volume_trend(weeks: int = 8) -> pd.DataFrame:
-    """Get weekly volume trend"""
+def get_weekly_volume_trend(weeks: int = 8, user_id: int = None) -> pd.DataFrame:
+    """Get weekly volume trend for a specific user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         query = """
             WITH weekly_data AS (
@@ -853,6 +986,7 @@ def get_weekly_volume_trend(weeks: int = 8) -> pd.DataFrame:
                 JOIN workouts w ON s.workout_id = w.id
                 JOIN exercises e ON s.exercise_id = e.id
                 WHERE e.category NOT IN ('Easy Run', 'Tempo Run', 'Long Easy Run')
+                AND e.user_id = %s
                 GROUP BY 
                     EXTRACT(YEAR FROM w.workout_date), 
                     EXTRACT(WEEK FROM w.workout_date),
@@ -866,7 +1000,7 @@ def get_weekly_volume_trend(weeks: int = 8) -> pd.DataFrame:
             GROUP BY year, week
             ORDER BY year ASC, week ASC
         """
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn, params=(user_id,))
         
         # Return only the last N weeks
         if not df.empty and len(df) > weeks:
@@ -874,16 +1008,22 @@ def get_weekly_volume_trend(weeks: int = 8) -> pd.DataFrame:
         
         return df
     
-# ADD THIS FUNCTION TO database.py
-
-def get_workout_by_date(workout_date: str) -> Optional[Dict]:
-    """Get workout for a specific date"""
+def get_workout_by_date(workout_date: str, user_id: int = None) -> Optional[Dict]:
+    """Get workout for a specific date and user"""
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM workouts WHERE workout_date = %s", (workout_date,))
+        cursor.execute(
+            "SELECT * FROM workouts WHERE workout_date = %s AND user_id = %s",
+            (workout_date, user_id)
+        )
         row = cursor.fetchone()
         return dict(row) if row else None
     
 @st.cache_data(ttl=300)
-def get_all_exercises_cached():
-    return get_all_exercises()
+def get_all_exercises_cached(user_id: int = None):
+    if user_id is None:
+        user_id = auth.get_current_user_id()
+    return get_all_exercises(user_id)
