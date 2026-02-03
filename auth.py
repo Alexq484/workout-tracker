@@ -43,12 +43,12 @@ def init_auth_tables():
     try:
         cursor = conn.cursor()
         
-        # Create users table
+        # Create users table (email is now nullable)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id SERIAL PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL UNIQUE,
+                email TEXT,
                 password_hash TEXT NOT NULL,
                 password_salt TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -84,7 +84,7 @@ def init_auth_tables():
         cursor.close()
         conn.close()
 
-def create_user(username: str, email: str, password: str) -> tuple[bool, str]:
+def create_user(username: str, password: str) -> tuple[bool, str]:
     """
     Create a new user account
     Returns (success, message)
@@ -100,30 +100,22 @@ def create_user(username: str, email: str, password: str) -> tuple[bool, str]:
         if len(password) < 6:
             return False, "Password must be at least 6 characters"
         
-        if '@' not in email:
-            return False, "Invalid email address"
-        
         # Check if username already exists
         cursor.execute("SELECT user_id FROM users WHERE username = %s", (username,))
         if cursor.fetchone():
             return False, "Username already exists"
         
-        # Check if email already exists
-        cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
-        if cursor.fetchone():
-            return False, "Email already registered"
-        
         # Hash password
         hashed_password, salt = hash_password(password)
         
-        # Insert new user
+        # Insert new user (email will be NULL)
         cursor.execute(
             """
-            INSERT INTO users (username, email, password_hash, password_salt, created_at)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO users (username, password_hash, password_salt, created_at)
+            VALUES (%s, %s, %s, %s)
             RETURNING user_id
             """,
-            (username, email, hashed_password, salt, datetime.now())
+            (username, hashed_password, salt, datetime.now())
         )
         
         user_id = cursor.fetchone()['user_id']
@@ -150,7 +142,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, dict]:
         
         cursor.execute(
             """
-            SELECT user_id, username, email, password_hash, password_salt
+            SELECT user_id, username, password_hash, password_salt
             FROM users
             WHERE username = %s
             """,
@@ -162,7 +154,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, dict]:
         if not result:
             return False, {}
         
-        user_id, username, email, password_hash, password_salt = result.values()
+        user_id, username, password_hash, password_salt = result.values()
         
         # Verify password
         if verify_password(password, password_hash, password_salt):
@@ -175,8 +167,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, dict]:
             
             user_data = {
                 'user_id': user_id,
-                'username': username,
-                'email': email
+                'username': username
             }
             
             return True, user_data
@@ -199,15 +190,12 @@ def init_session_state():
         st.session_state.user_id = None
     if 'username' not in st.session_state:
         st.session_state.username = None
-    if 'email' not in st.session_state:
-        st.session_state.email = None
 
 def logout():
     """Logout the current user"""
     st.session_state.authenticated = False
     st.session_state.user_id = None
     st.session_state.username = None
-    st.session_state.email = None
     # Clear workout session state
     if 'workout_id' in st.session_state:
         st.session_state.workout_id = None
@@ -240,7 +228,6 @@ def login_page():
                         st.session_state.authenticated = True
                         st.session_state.user_id = user_data['user_id']
                         st.session_state.username = user_data['username']
-                        st.session_state.email = user_data['email']
                         st.success(f"Welcome back, {user_data['username']}!")
                         st.rerun()
                     else:
@@ -251,19 +238,18 @@ def login_page():
         
         with st.form("signup_form"):
             new_username = st.text_input("Username", key="signup_username")
-            new_email = st.text_input("Email", key="signup_email")
             new_password = st.text_input("Password", type="password", key="signup_password")
             confirm_password = st.text_input("Confirm Password", type="password")
             
             submit = st.form_submit_button("Sign Up", use_container_width=True, type="primary")
             
             if submit:
-                if not new_username or not new_email or not new_password:
+                if not new_username or not new_password:
                     st.error("Please fill in all fields")
                 elif new_password != confirm_password:
                     st.error("Passwords do not match")
                 else:
-                    success, message = create_user(new_username, new_email, new_password)
+                    success, message = create_user(new_username, new_password)
                     
                     if success:
                         st.success(message)
