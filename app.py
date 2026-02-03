@@ -9,10 +9,6 @@ import database as db
 import utils
 import auth  # Add at top
 
-# After st.set_page_config():
-auth.init_session_state()
-auth.init_auth_tables()
-auth.require_auth()
 
 # In sidebar (replace footer):
 st.sidebar.divider()
@@ -39,6 +35,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+# After st.set_page_config():
+auth.init_session_state()
+auth.init_auth_tables()
+auth.require_auth()
 
 # Initialize database
 db.init_database()
@@ -1358,7 +1358,11 @@ elif page == "Manage Exercises":
                                 db.delete_exercise(exercise['id'])
                                 st.rerun()
 
-# Footer
+# In sidebar (replace footer):
 st.sidebar.divider()
-st.sidebar.caption("Optimized for mobile")
+st.sidebar.caption(f"👤 {st.session_state.username}")
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    auth.logout()
+    st.rerun()
+
 
