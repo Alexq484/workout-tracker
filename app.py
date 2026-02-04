@@ -7,6 +7,7 @@ import pytz
 
 import database as db
 import utils
+import auth
 
 # Set timezone to EST
 EST = pytz.timezone('America/New_York')
@@ -26,6 +27,14 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+# Initialize authentication
+auth.init_session_state()
+auth.init_auth_tables()
+
+# Check if user is authenticated
+if not st.session_state.authenticated:
+    auth.login_page()
+    st.stop()  
 
 # Initialize database
 db.init_database()
@@ -1447,3 +1456,4 @@ elif page == "Manage Exercises":
 # Footer
 st.sidebar.divider()
 st.sidebar.caption("Optimized for mobile")
+
