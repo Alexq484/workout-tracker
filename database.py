@@ -171,8 +171,12 @@ def add_category(name: str, user_id: int = None) -> int:
             "INSERT INTO categories (name, user_id) VALUES (%s, %s) RETURNING id",
             (name.strip(), user_id)
         )
-        return cursor.fetchone()['id']
-
+        category_id = cursor.fetchone()['id']
+    
+    # Clear the cache so new category shows up immediately
+    get_all_categories_cached.clear()
+    
+    return category_id
 def get_all_categories(user_id: int = None) -> List[Dict]:
     """Get all categories for a specific user"""
     if user_id is None:
@@ -197,6 +201,9 @@ def delete_category(category_id: int, user_id: int = None):
             "DELETE FROM categories WHERE id = %s AND user_id = %s",
             (category_id, user_id)
         )
+    
+    # Clear the cache so deletion shows up immediately
+    get_all_categories_cached.clear())
 
 def get_category_by_name(name: str, user_id: int = None) -> Optional[Dict]:
     """Get category by name for a specific user"""
@@ -231,7 +238,13 @@ def add_exercise(name: str, category: str = None, user_id: int = None) -> int:
             "INSERT INTO exercises (name, category, user_id) VALUES (%s, %s, %s) RETURNING id",
             (name.strip(), category, user_id)
         )
-        return cursor.fetchone()['id']
+        exercise_id = cursor.fetchone()['id']
+    
+    # Clear the cache
+    get_all_exercises_cached.clear()
+    
+    return exercise_id
+
 
 def get_all_exercises(user_id: int = None) -> List[Dict]:
     """Get all exercises for a specific user"""
@@ -271,6 +284,9 @@ def delete_exercise(exercise_id: int, user_id: int = None):
             "DELETE FROM exercises WHERE id = %s AND user_id = %s",
             (exercise_id, user_id)
         )
+    
+    # Clear the cache
+    get_all_exercises_cached.clear())
 
 def update_set(set_id: int, reps: int, weight: float):
     """Update a specific set's reps and weight"""
@@ -1099,3 +1115,4 @@ def get_all_exercises_cached(user_id: int = None):
     if user_id is None:
         user_id = auth.get_current_user_id()
     return get_all_exercises(user_id)
+
