@@ -203,7 +203,7 @@ def delete_category(category_id: int, user_id: int = None):
         )
     
     # Clear the cache so deletion shows up immediately
-    get_all_categories_cached.clear())
+    get_all_categories_cached.clear()
 
 def get_category_by_name(name: str, user_id: int = None) -> Optional[Dict]:
     """Get category by name for a specific user"""
@@ -286,7 +286,7 @@ def delete_exercise(exercise_id: int, user_id: int = None):
         )
     
     # Clear the cache
-    get_all_exercises_cached.clear())
+    get_all_exercises_cached.clear()
 
 def update_set(set_id: int, reps: int, weight: float):
     """Update a specific set's reps and weight"""
@@ -1115,4 +1115,5 @@ def get_all_exercises_cached(user_id: int = None):
     if user_id is None:
         user_id = auth.get_current_user_id()
     return get_all_exercises(user_id)
+
 
