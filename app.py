@@ -1397,19 +1397,19 @@ elif page == "Manage Exercises":
         else:
             new_category = st.selectbox("Category", category_names)
         
-        if st.form_submit_button("➕ Add Exercise", use_container_width=True):
-            if not new_exercise_name:
-                st.error("Please enter an exercise name")
-            elif not category_names:
-                st.error("Please create a category first")
-            else:
-                existing = db.get_exercise_by_name(new_exercise_name)
-                if existing:
-                    st.error("Exercise already exists")
-                else:
-                    db.add_exercise(new_exercise_name, new_category)
-                    st.success(f"Added {new_exercise_name}")
-                    st.rerun()
+       if st.form_submit_button("➕ Add Exercise", use_container_width=True):
+    if not new_exercise_name:
+        st.error("Please enter an exercise name")
+    elif not category_names:
+        st.error("Please create a category first")
+    else:
+        existing = db.get_exercise_by_name(new_exercise_name)
+        if existing:
+            st.warning(f"✅ '{new_exercise_name}' already exists in your exercises")  # <-- Better message
+        else:
+            db.add_exercise(new_exercise_name, new_category)
+            st.success(f"Added {new_exercise_name}")
+            st.rerun()
     
     st.divider()
     
@@ -1456,4 +1456,5 @@ elif page == "Manage Exercises":
 # Footer
 st.sidebar.divider()
 st.sidebar.caption("Optimized for mobile")
+
 
