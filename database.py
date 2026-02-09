@@ -234,6 +234,19 @@ def add_exercise(name: str, category: str = None, user_id: int = None) -> int:
     
     with get_db() as conn:
         cursor = conn.cursor()
+        
+        # Check if exercise already exists for this user
+        cursor.execute(
+            "SELECT id FROM exercises WHERE name = %s AND user_id = %s",
+            (name.strip(), user_id)
+        )
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Return existing exercise ID instead of trying to create duplicate
+            return existing['id']
+        
+        # Create new exercise
         cursor.execute(
             "INSERT INTO exercises (name, category, user_id) VALUES (%s, %s, %s) RETURNING id",
             (name.strip(), category, user_id)
@@ -1115,5 +1128,6 @@ def get_all_exercises_cached(user_id: int = None):
     if user_id is None:
         user_id = auth.get_current_user_id()
     return get_all_exercises(user_id)
+
 
 
