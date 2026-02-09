@@ -1397,7 +1397,7 @@ with st.form("add_exercise"):
     else:
         new_category = st.selectbox("Category", category_names)
     
-    if st.form_submit_button("➕ Add Exercise", use_container_width=True):  # <-- Fixed indentation
+    if st.form_submit_button("➕ Add Exercise", use_container_width=True):
         if not new_exercise_name:
             st.error("Please enter an exercise name")
         elif not category_names:
@@ -1410,54 +1410,45 @@ with st.form("add_exercise"):
                 db.add_exercise(new_exercise_name, new_category)
                 st.success(f"Added {new_exercise_name}")
                 st.rerun()
+
+st.divider()
+
+# Display exercises grouped by category
+st.subheader("Your Exercises")
+exercises = db.get_all_exercises_cached()
+
+if not exercises:
+    st.info("No exercises yet. Add your first exercise above!")
+else:
+    # Group exercises by category
+    df = pd.DataFrame(exercises)
     
-    st.divider()
-    
-    # Display exercises grouped by category
-    st.subheader("Your Exercises")
-    exercises = db.get_all_exercises_cached()
-    
-    if not exercises:
-        st.info("No exercises yet. Add your first exercise above!")
-    else:
-        # Group exercises by category
-        df = pd.DataFrame(exercises)
+    for category in category_names:
+        category_exercises = df[df['category'] == category]
         
-        for category in category_names:
-            category_exercises = df[df['category'] == category]
-            
-            if not category_exercises.empty:
-                with st.expander(f"📁 {category} ({len(category_exercises)})", expanded=True):
-                    for _, exercise in category_exercises.iterrows():
-                        col1, col2 = st.columns([4, 1])
-                        with col1:
-                            st.write(f"• {exercise['name']}")
-                        with col2:
-                            if st.button("🗑️", key=f"del_ex_{exercise['id']}", use_container_width=True):
-                                db.delete_exercise(exercise['id'])
-                                st.success(f"Deleted {exercise['name']}")
-                                st.rerun()
-        
-        # Show exercises with no category or deleted category
-        orphaned_exercises = df[~df['category'].isin(category_names)]
-        if not orphaned_exercises.empty:
-            with st.expander(f"⚠️ Uncategorized ({len(orphaned_exercises)})", expanded=False):
-                st.warning("These exercises have invalid categories. Consider deleting them.")
-                for _, exercise in orphaned_exercises.iterrows():
+        if not category_exercises.empty:
+            with st.expander(f"📁 {category} ({len(category_exercises)})", expanded=True):
+                for _, exercise in category_exercises.iterrows():
                     col1, col2 = st.columns([4, 1])
                     with col1:
-                        st.write(f"• {exercise['name']} (Category: {exercise['category']})")
+                        st.write(f"• {exercise['name']}")
                     with col2:
-                        if st.button("🗑️", key=f"del_ex_orphan_{exercise['id']}", use_container_width=True):
+                        if st.button("🗑️", key=f"del_ex_{exercise['id']}", use_container_width=True):
                             db.delete_exercise(exercise['id'])
                             st.success(f"Deleted {exercise['name']}")
                             st.rerun()
-
-# Footer
-st.sidebar.divider()
-st.sidebar.caption("Optimized for mobile")
-
-
-
-
-
+    
+    # Show exercises with no category or deleted category
+    orphaned_exercises = df[~df['category'].isin(category_names)]
+    if not orphaned_exercises.empty:
+        with st.expander(f"⚠️ Uncategorized ({len(orphaned_exercises)})", expanded=False):
+            st.warning("These exercises have invalid categories. Consider deleting them.")
+            for _, exercise in orphaned_exercises.iterrows():
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"• {exercise['name']} (Category: {exercise['category']})")
+                with col2:
+                    if st.button("🗑️", key=f"del_ex_orphan_{exercise['id']}", use_container_width=True):
+                        db.delete_exercise(exercise['id'])
+                        st.success(f"Deleted {exercise['name']}")
+                        st.rerun()
