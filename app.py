@@ -1383,33 +1383,33 @@ elif page == "Manage Exercises":
     st.subheader("💪 Manage Exercises")
     
     # Add new exercise
-    with st.form("add_exercise"):
-        st.write("**Add New Exercise**")
-        
-        new_exercise_name = st.text_input("Exercise Name", placeholder="e.g., Bench Press, Squats")
-        
-        # Get categories for dropdown
-        category_names = [c['name'] for c in categories] if categories else []
-        
-        if not category_names:
-            st.warning("⚠️ Please add at least one category first")
-            new_category = None
+with st.form("add_exercise"):
+    st.write("**Add New Exercise**")
+    
+    new_exercise_name = st.text_input("Exercise Name", placeholder="e.g., Bench Press, Squats")
+    
+    # Get categories for dropdown
+    category_names = [c['name'] for c in categories] if categories else []
+    
+    if not category_names:
+        st.warning("⚠️ Please add at least one category first")
+        new_category = None
+    else:
+        new_category = st.selectbox("Category", category_names)
+    
+    if st.form_submit_button("➕ Add Exercise", use_container_width=True):  # <-- Fixed indentation
+        if not new_exercise_name:
+            st.error("Please enter an exercise name")
+        elif not category_names:
+            st.error("Please create a category first")
         else:
-            new_category = st.selectbox("Category", category_names)
-        
-       if st.form_submit_button("➕ Add Exercise", use_container_width=True):
-            if not new_exercise_name:
-                st.error("Please enter an exercise name")
-            elif not category_names:
-                st.error("Please create a category first")
+            existing = db.get_exercise_by_name(new_exercise_name)
+            if existing:
+                st.warning(f"✅ '{new_exercise_name}' already exists in your exercises")
             else:
-                existing = db.get_exercise_by_name(new_exercise_name)
-                if existing:
-                    st.warning(f"✅ '{new_exercise_name}' already exists in your exercises")  # <-- Better message
-                else:
-                    db.add_exercise(new_exercise_name, new_category)
-                    st.success(f"Added {new_exercise_name}")
-                    st.rerun()
+                db.add_exercise(new_exercise_name, new_category)
+                st.success(f"Added {new_exercise_name}")
+                st.rerun()
     
     st.divider()
     
@@ -1456,6 +1456,7 @@ elif page == "Manage Exercises":
 # Footer
 st.sidebar.divider()
 st.sidebar.caption("Optimized for mobile")
+
 
 
 
