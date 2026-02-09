@@ -1129,5 +1129,55 @@ def get_all_exercises_cached(user_id: int = None):
         user_id = auth.get_current_user_id()
     return get_all_exercises(user_id)
 
+def migrate_exercises_for_multiuser():
+    """Migrate exercises table to support multi-user"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Check if user_id column exists
+        cursor.execute("PRAGMA table_info(exercises)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'user_id' not in columns:
+            print("Migrating exercises table...")
+            
+            # SQLite doesn't support ALTER TABLE to modify constraints easily
+            # So we need to recreate the table
+            
+            # 1. Create new table with correct schema
+            cursor.execute("""
+                CREATE TABLE exercises_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    category TEXT,
+                    user_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(name, user_id)
+                )
+            """)
+            
+            # 2. Copy data from old table (set user_id to current user or NULL)
+            current_user = auth.get_current_user_id()
+            cursor.execute(f"""
+                INSERT INTO exercises_new (id, name, category, created_at, user_id)
+                SELECT id, name, category, created_at, {current_user}
+                FROM exercises
+            """)
+            
+            # 3. Drop old table
+            cursor.execute("DROP TABLE exercises")
+            
+            # 4. Rename new table
+            cursor.execute("ALTER TABLE exercises_new RENAME TO exercises")
+            
+            # 5. Recreate indexes
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_exercises_user ON exercises(user_id)")
+            
+            conn.commit()
+            print("Migration complete!")
+        else:
+            print("Exercises table already has user_id column")
+
+
 
 
