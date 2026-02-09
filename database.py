@@ -158,7 +158,7 @@ def init_database():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_categories_user ON categories(user_id)")
         conn.commit()
     
-     migrate_exercises_for_multiuser()
+    migrate_exercises_for_multiuser()
 
 # ==================== CATEGORIES ====================
 
@@ -1161,6 +1161,7 @@ def migrate_exercises_for_multiuser():
                 print(f"Deleted {result['count']} orphaned exercises")
         else:
             print("No migration needed - all exercises have user_id")
+
 
 
 
