@@ -190,7 +190,8 @@ def get_all_categories(user_id: int = None) -> List[Dict]:
             "SELECT * FROM categories WHERE user_id = %s ORDER BY name",
             (user_id,)
         )
-        return [dict(row) for row in cursor.fetchall()]
+        result = cursor.fetchall()
+        return [dict(row) for row in result] if result else []  # ✅ Explicit empty list
 
 def delete_category(category_id: int, user_id: int = None):
     """Delete a category (with user verification)"""
@@ -225,7 +226,8 @@ def get_category_by_name(name: str, user_id: int = None) -> Optional[Dict]:
 def get_all_categories_cached(user_id: int = None):
     if user_id is None:
         user_id = auth.get_current_user_id()
-    return get_all_categories(user_id)
+    result = get_all_categories(user_id)
+    return result if result is not None else []  # ✅ Extra safety
 
 # ==================== EXERCISES ====================
 
@@ -1161,6 +1163,7 @@ def migrate_exercises_for_multiuser():
                 print(f"Deleted {result['count']} orphaned exercises")
         else:
             print("No migration needed - all exercises have user_id")
+
 
 
 
