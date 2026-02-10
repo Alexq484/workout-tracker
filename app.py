@@ -855,7 +855,7 @@ with st.form(key=f"quick_log_{selected_exercise}", clear_on_submit=False):
                 if not pr_check['is_weight_pr'] and not pr_check['is_1rm_pr']:
                     st.success(f"✅ {reps} reps @ {weight} lbs")
                 
-                st.rerun()
+            st.rerun()
                 
                 else:
                     # STRENGTH TRAINING INPUTS
@@ -1511,6 +1511,7 @@ else:
                         db.delete_exercise(exercise['id'])
                         st.success(f"Deleted {exercise['name']}")
                         st.rerun()
+
 
 
 
