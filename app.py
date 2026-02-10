@@ -1389,7 +1389,8 @@ with st.form("add_exercise"):
     new_exercise_name = st.text_input("Exercise Name", placeholder="e.g., Bench Press, Squats")
     
     # Get categories for dropdown
-    category_names = [c['name'] for c in categories] if categories else []
+    # Get categories for dropdown
+    category_names = [c['name'] for c in (categories or [])]
     
     if not category_names:
         st.warning("⚠️ Please add at least one category first")
@@ -1452,3 +1453,4 @@ else:
                         db.delete_exercise(exercise['id'])
                         st.success(f"Deleted {exercise['name']}")
                         st.rerun()
+
