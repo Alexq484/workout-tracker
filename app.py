@@ -1382,23 +1382,30 @@ elif page == "Manage Exercises":
     # ==================== MANAGE EXERCISES SECTION ====================
     st.subheader("💪 Manage Exercises")
     
-    # Add new exercise
+   # Add new exercise
 with st.form("add_exercise"):
     st.write("**Add New Exercise**")
     
     new_exercise_name = st.text_input("Exercise Name", placeholder="e.g., Bench Press, Squats")
     
-    # Get categories for dropdown
-    # Get categories for dropdown
-    category_names = [c['name'] for c in (categories or [])]
+    # Get categories for dropdown - SAFELY
+    categories = db.get_all_categories_cached()
+    
+    # Ensure categories is never None
+    if categories is None:
+        categories = []
+    
+    category_names = [c['name'] for c in categories]
     
     if not category_names:
         st.warning("⚠️ Please add at least one category first")
         new_category = None
+        submitted = st.form_submit_button("➕ Add Exercise", use_container_width=True, disabled=True)
     else:
         new_category = st.selectbox("Category", category_names)
+        submitted = st.form_submit_button("➕ Add Exercise", use_container_width=True)
     
-    if st.form_submit_button("➕ Add Exercise", use_container_width=True):
+    if submitted:
         if not new_exercise_name:
             st.error("Please enter an exercise name")
         elif not category_names:
@@ -1411,7 +1418,6 @@ with st.form("add_exercise"):
                 db.add_exercise(new_exercise_name, new_category)
                 st.success(f"Added {new_exercise_name}")
                 st.rerun()
-
 st.divider()
 
 # Display exercises grouped by category
@@ -1453,4 +1459,5 @@ else:
                         db.delete_exercise(exercise['id'])
                         st.success(f"Deleted {exercise['name']}")
                         st.rerun()
+
 
