@@ -666,196 +666,149 @@ elif page == "Log Workout":
             # Get exercise object
             exercise = db.get_exercise_by_name(selected_exercise)
             
-            # Determine if this is a cardio exercise
-is_cardio = exercise and is_cardio_category(exercise['category'])
+           # Determine if this is a cardio exercise
+            is_cardio = exercise and is_cardio_category(exercise['category'])
 
-# Quick add form - mobile optimized
-# Force form to reset when exercise changes by using exercise name in form key
-with st.form(key=f"quick_log_{selected_exercise}", clear_on_submit=False):
-    
-    # Check if we just logged a set for this exercise today
-    today_sets = db.get_sets_for_workout(st.session_state.workout_id)
-    
-    # Safely filter for current exercise - handle empty DataFrame
-    if not today_sets.empty and 'exercise' in today_sets.columns:
-        todays_sets_for_exercise = today_sets[today_sets['exercise'] == selected_exercise]
-    else:
-        todays_sets_for_exercise = pd.DataFrame()
+            # Quick add form - mobile optimized
+            # Force form to reset when exercise changes by using exercise name in form key
+            with st.form(key=f"quick_log_{selected_exercise}", clear_on_submit=False):
+                
+                # Check if we just logged a set for this exercise today
+                today_sets = db.get_sets_for_workout(st.session_state.workout_id)
+                
+                # Safely filter for current exercise - handle empty DataFrame
+                if not today_sets.empty and 'exercise' in today_sets.columns:
+                    todays_sets_for_exercise = today_sets[today_sets['exercise'] == selected_exercise]
+                else:
+                    todays_sets_for_exercise = pd.DataFrame()
 
-    # Show last session data
-    if exercise:
-        last_session = db.get_last_workout_for_exercise(
-            exercise['id'],
-            before_date=today.isoformat()
-        )
-        
-        if last_session:
-            if is_cardio:
-                last_miles = last_session['sets'][0]['reps'] / 10.0
-                last_time = last_session['sets'][0]['weight']
-                last_hr = last_session['sets'][0]['set_number']
-                pace = last_time / last_miles if last_miles > 0 else 0
-                
-                st.markdown(f"""
-                <div class="last-session">
-                    <strong>📊 Last: {last_session['date']}</strong><br>
-                    {last_miles:.1f} mi • {last_time:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi
-                    {f' • {last_hr} bpm' if last_hr > 0 else ''}
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Use most recent set from today if exists, otherwise use last session
-                if not todays_sets_for_exercise.empty:
-                    most_recent = todays_sets_for_exercise.iloc[-1]
-                    default_miles = most_recent['reps'] / 10.0
-                    default_time = most_recent['weight']
-                    default_hr = most_recent['set_number']
+                # Show last session data
+                if exercise:
+                    last_session = db.get_last_workout_for_exercise(
+                        exercise['id'],
+                        before_date=today.isoformat()
+                    )
+                    
+                    if last_session:
+                        if is_cardio:
+                            last_miles = last_session['sets'][0]['reps'] / 10.0
+                            last_time = last_session['sets'][0]['weight']
+                            last_hr = last_session['sets'][0]['set_number']
+                            pace = last_time / last_miles if last_miles > 0 else 0
+                            
+                            st.markdown(f"""
+                            <div class="last-session">
+                                <strong>📊 Last: {last_session['date']}</strong><br>
+                                {last_miles:.1f} mi • {last_time:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi
+                                {f' • {last_hr} bpm' if last_hr > 0 else ''}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Use most recent set from today if exists, otherwise use last session
+                            if not todays_sets_for_exercise.empty:
+                                most_recent = todays_sets_for_exercise.iloc[-1]
+                                default_miles = most_recent['reps'] / 10.0
+                                default_time = most_recent['weight']
+                                default_hr = most_recent['set_number']
+                            else:
+                                default_miles = last_miles
+                                default_time = last_time
+                                default_hr = last_hr if last_hr > 0 else 140
+                        else:
+                            st.markdown(f"""
+                            <div class="last-session">
+                                <strong>📊 Last: {last_session['date']}</strong><br>
+                                {len(last_session['sets'])} sets • 
+                                {last_session['sets'][0]['reps']}-{last_session['sets'][-1]['reps']} reps • 
+                                {last_session['sets'][0]['weight']}-{max(s['weight'] for s in last_session['sets'])} lbs
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Use most recent set from today if exists, otherwise use last session
+                            if not todays_sets_for_exercise.empty:
+                                most_recent = todays_sets_for_exercise.iloc[-1]
+                                default_weight = float(most_recent['weight'])
+                                default_reps = int(most_recent['reps'])
+                            else:
+                                default_weight = max(s['weight'] for s in last_session['sets'])
+                                default_reps = last_session['sets'][0]['reps']
+                    else:
+                        # No previous session - check today's sets or use defaults
+                        if is_cardio:
+                            if not todays_sets_for_exercise.empty:
+                                most_recent = todays_sets_for_exercise.iloc[-1]
+                                default_miles = most_recent['reps'] / 10.0
+                                default_time = most_recent['weight']
+                                default_hr = most_recent['set_number']
+                            else:
+                                default_miles = 3.0
+                                default_time = 30.0
+                                default_hr = 140
+                        else:
+                            if not todays_sets_for_exercise.empty:
+                                most_recent = todays_sets_for_exercise.iloc[-1]
+                                default_weight = float(most_recent['weight'])
+                                default_reps = int(most_recent['reps'])
+                            else:
+                                default_weight = 135.0
+                                default_reps = 10
                 else:
-                    default_miles = last_miles
-                    default_time = last_time
-                    default_hr = last_hr if last_hr > 0 else 140
-            else:
-                st.markdown(f"""
-                <div class="last-session">
-                    <strong>📊 Last: {last_session['date']}</strong><br>
-                    {len(last_session['sets'])} sets • 
-                    {last_session['sets'][0]['reps']}-{last_session['sets'][-1]['reps']} reps • 
-                    {last_session['sets'][0]['weight']}-{max(s['weight'] for s in last_session['sets'])} lbs
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Use most recent set from today if exists, otherwise use last session
-                if not todays_sets_for_exercise.empty:
-                    most_recent = todays_sets_for_exercise.iloc[-1]
-                    default_weight = float(most_recent['weight'])
-                    default_reps = int(most_recent['reps'])
-                else:
-                    default_weight = max(s['weight'] for s in last_session['sets'])
-                    default_reps = last_session['sets'][0]['reps']
-        else:
-            # No previous session - check today's sets or use defaults
-            if is_cardio:
-                if not todays_sets_for_exercise.empty:
-                    most_recent = todays_sets_for_exercise.iloc[-1]
-                    default_miles = most_recent['reps'] / 10.0
-                    default_time = most_recent['weight']
-                    default_hr = most_recent['set_number']
-                else:
+                    # No exercise selected - use defaults
+                    default_weight = 135.0
+                    default_reps = 10
                     default_miles = 3.0
                     default_time = 30.0
                     default_hr = 140
-            else:
-                if not todays_sets_for_exercise.empty:
-                    most_recent = todays_sets_for_exercise.iloc[-1]
-                    default_weight = float(most_recent['weight'])
-                    default_reps = int(most_recent['reps'])
-                else:
-                    default_weight = 135.0
-                    default_reps = 10
-    else:
-        # No exercise selected - use defaults
-        default_weight = 135.0
-        default_reps = 10
-        default_miles = 3.0
-        default_time = 30.0
-        default_hr = 140
-    
-    # Input fields
-    if is_cardio:
-        # CARDIO INPUTS
-        miles = st.number_input("Distance (miles)", min_value=0.1, max_value=50.0, value=default_miles, step=0.1)
-        
-        time_minutes = st.number_input("Time (min)", min_value=1.0, max_value=500.0, value=default_time, step=1.0)
-        
-        heart_rate = st.number_input("Avg HR (bpm)", min_value=0, max_value=220, value=default_hr, step=1)
-        
-        # Show pace
-        if miles > 0:
-            pace = time_minutes / miles
-            st.info(f"**Pace:** {int(pace)}:{int((pace % 1) * 60):02d} min/mile")
-        
-        submitted = st.form_submit_button("➕ Add Cardio", use_container_width=True)
-        
-        if submitted:
-            if miles <= 0:
-                st.error("Distance must be positive")
-            elif time_minutes <= 0:
-                st.error("Time must be positive")
-            else:
-                # Save to session state
-                st.session_state.last_exercise = selected_exercise
-                st.session_state.last_miles = miles
-                st.session_state.last_time = time_minutes
-                st.session_state.last_hr = heart_rate
                 
-                db.add_set(
-                    st.session_state.workout_id,
-                    exercise['id'],
-                    int(miles * 10),
-                    time_minutes
-                )
-                
-                db.update_last_set_hr(st.session_state.workout_id, exercise['id'], heart_rate)
-                
-                pr_check = db.check_running_pr(exercise['id'], miles, time_minutes, today.isoformat())
-                
-                if pr_check['is_pace_pr']:
-                    st.balloons()
-                    st.success(f"🎉 NEW PACE PR! {int(pace)}:{int((pace % 1) * 60):02d}")
-                elif pr_check['is_distance_pr']:
-                    st.balloons()
-                    st.success(f"🎉 NEW DISTANCE PR! {miles} miles")
-                else:
-                    st.success(f"✅ {miles} mi • {time_minutes:.0f} min")
-                
-                st.rerun()
-    
-    else:
-        # STRENGTH TRAINING INPUTS
-        reps = st.number_input("Reps", min_value=1, max_value=100, value=default_reps, step=1)
-        
-        weight = st.number_input("Weight (lbs)", min_value=0.0, max_value=1000.0, value=default_weight, step=5.0)
-        
-        # Show estimated 1RM
-        est_1rm = calculate_estimated_1rm(weight, reps)
-        st.info(f"**Est 1RM:** {est_1rm:.1f} lbs")
-        
-        submitted = st.form_submit_button("➕ Add Set", use_container_width=True)
-        
-        if submitted:
-            valid, error_msg = utils.validate_set_input(reps, weight)
-            
-            if not valid:
-                st.error(error_msg)
-            else:
-                # Save to session state
-                st.session_state.last_exercise = selected_exercise
-                st.session_state.last_reps = reps
-                st.session_state.last_weight = weight
-                
-                db.add_set(
-                    st.session_state.workout_id,
-                    exercise['id'],
-                    reps,
-                    weight
-                )
-                
-                pr_check = db.check_if_pr(exercise['id'], weight, reps, today.isoformat())
-                
-                if pr_check['is_weight_pr']:
-                    st.balloons()
-                    st.success(f"🎉 NEW PR! {weight} lbs")
-                    db.log_pr(exercise['id'], 'weight', weight, today.isoformat(), f"{reps} reps")
-                
-                if pr_check['is_1rm_pr']:
-                    st.balloons()
-                    st.success(f"🎉 NEW 1RM PR! {est_1rm:.1f} lbs")
-                    db.log_pr(exercise['id'], '1rm', est_1rm, today.isoformat(), f"{weight} lbs x {reps}")
-                
-                if not pr_check['is_weight_pr'] and not pr_check['is_1rm_pr']:
-                    st.success(f"✅ {reps} reps @ {weight} lbs")
-                
-            st.rerun()
+                # Input fields
+                if is_cardio:
+                    # CARDIO INPUTS
+                    miles = st.number_input("Distance (miles)", min_value=0.1, max_value=50.0, value=default_miles, step=0.1)
+                    
+                    time_minutes = st.number_input("Time (min)", min_value=1.0, max_value=500.0, value=default_time, step=1.0)
+                    
+                    heart_rate = st.number_input("Avg HR (bpm)", min_value=0, max_value=220, value=default_hr, step=1)
+                    
+                    # Show pace
+                    if miles > 0:
+                        pace = time_minutes / miles
+                        st.info(f"**Pace:** {int(pace)}:{int((pace % 1) * 60):02d} min/mile")
+                    
+                    submitted = st.form_submit_button("➕ Add Cardio", use_container_width=True)
+                    
+                    if submitted:
+                        if miles <= 0:
+                            st.error("Distance must be positive")
+                        elif time_minutes <= 0:
+                            st.error("Time must be positive")
+                        else:
+                            # Save to session state
+                            st.session_state.last_exercise = selected_exercise
+                            st.session_state.last_miles = miles
+                            st.session_state.last_time = time_minutes
+                            st.session_state.last_hr = heart_rate
+                            
+                            db.add_set(
+                                st.session_state.workout_id,
+                                exercise['id'],
+                                int(miles * 10),
+                                time_minutes
+                            )
+                            
+                            db.update_last_set_hr(st.session_state.workout_id, exercise['id'], heart_rate)
+                            
+                            pr_check = db.check_running_pr(exercise['id'], miles, time_minutes, today.isoformat())
+                            
+                            if pr_check['is_pace_pr']:
+                                st.balloons()
+                                st.success(f"🎉 NEW PACE PR! {int(pace)}:{int((pace % 1) * 60):02d}")
+                            elif pr_check['is_distance_pr']:
+                                st.balloons()
+                                st.success(f"🎉 NEW DISTANCE PR! {miles} miles")
+                            else:
+                                st.success(f"✅ {miles} mi • {time_minutes:.0f} min")
+                            
+                            st.rerun()
                 
                 else:
                     # STRENGTH TRAINING INPUTS
@@ -904,88 +857,88 @@ with st.form(key=f"quick_log_{selected_exercise}", clear_on_submit=False):
                             
                             st.rerun()
             
-           # Display today's workout
-st.divider()
-st.subheader("Today's Sets")
-
-sets_df = db.get_sets_for_workout(st.session_state.workout_id)
-
-if sets_df.empty:
-    st.info("No sets logged yet")
-else:
-    # Group by exercise
-    for exercise_name in sets_df['exercise'].unique():
-        exercise_sets = sets_df[sets_df['exercise'] == exercise_name]
-        exercise_obj = db.get_exercise_by_name(exercise_name)
-        
-        # Skip if exercise was deleted
-        if not exercise_obj:
-            st.warning(f"⚠️ Exercise '{exercise_name}' no longer exists")
-            continue
-        
-        is_cardio_exercise = is_cardio_category(exercise_obj['category'])
-        
-        with st.expander(f"**{exercise_name}**", expanded=True):
-            if is_cardio_exercise:
-                # Display cardio sets with delete buttons
-                for idx, row in exercise_sets.iterrows():
-                    miles = row['reps'] / 10.0
-                    time_min = row['weight']
-                    pace = time_min / miles if miles > 0 else 0
-                    hr = row['set_number']
-                    
-                    col1, col2 = st.columns([5, 1])
-                    with col1:
-                        st.write(f"**{miles:.1f} mi** • {time_min:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi" + (f" • {hr} bpm" if hr > 0 else ""))
-                    with col2:
-                        if st.button("🗑️", key=f"del_set_{idx}", use_container_width=True):
-                            # Get the actual id from the dataframe
-                            set_id = exercise_sets.loc[idx, 'id']
-                            db.delete_set(set_id)
-                            st.success("Deleted!")
-                            st.rerun()
+            # Display today's workout
+            st.divider()
+            st.subheader("Today's Sets")
+            
+            sets_df = db.get_sets_for_workout(st.session_state.workout_id)
+            
+            if sets_df.empty:
+                st.info("No sets logged yet")
             else:
-                # Strength training sets
-                pr_data = db.get_exercise_pr(exercise_obj['id'])
-                max_weight_today = exercise_sets['weight'].max()
-                is_pr_today = False
-                
-                if pr_data['max_weight']:
-                    if max_weight_today >= pr_data['max_weight']['max_weight']:
-                        is_pr_today = True
-                
-                # Display sets with delete buttons
-                for idx, row in exercise_sets.iterrows():
-                    col1, col2, col3, col4, col5 = st.columns([1, 1, 1.5, 2, 1])
+                # Group by exercise
+                for exercise_name in sets_df['exercise'].unique():
+                    exercise_sets = sets_df[sets_df['exercise'] == exercise_name]
+                    exercise_obj = db.get_exercise_by_name(exercise_name)
                     
-                    with col1:
-                        st.write(f"**Set {row['set_number']}**")
-                    with col2:
-                        st.write(f"{row['reps']} reps")
-                    with col3:
-                        st.write(f"{row['weight']} lbs")
-                    with col4:
-                        volume = row['reps'] * row['weight']
-                        est_1rm = calculate_estimated_1rm(row['weight'], row['reps'])
-                        st.caption(f"Vol: {volume:,.0f} • 1RM: {est_1rm:.0f}")
-                    with col5:
-                        if st.button("🗑️", key=f"del_set_{row['id']}", use_container_width=True):
-                            db.delete_set(row['id'])
-                            st.success("Deleted!")
-                            st.rerun()
-                
-                st.divider()
-                
-                # Summary stats
-                total_volume = (exercise_sets['reps'] * exercise_sets['weight']).sum()
-                max_weight = exercise_sets['weight'].max()
-                
-                col1, col2 = st.columns(2)
-                col1.metric("Total Volume", f"{total_volume:,.0f}")
-                col2.metric("Max Weight", f"{max_weight} lbs")
-                
-                if is_pr_today:
-                    st.markdown('<span class="pr-badge">🏆 PR!</span>', unsafe_allow_html=True)
+                    # Skip if exercise was deleted
+                    if not exercise_obj:
+                        st.warning(f"⚠️ Exercise '{exercise_name}' no longer exists")
+                        continue
+                    
+                    is_cardio_exercise = is_cardio_category(exercise_obj['category'])
+                    
+                    with st.expander(f"**{exercise_name}**", expanded=True):
+                        if is_cardio_exercise:
+                            # Display cardio sets with delete buttons
+                            for idx, row in exercise_sets.iterrows():
+                                miles = row['reps'] / 10.0
+                                time_min = row['weight']
+                                pace = time_min / miles if miles > 0 else 0
+                                hr = row['set_number']
+                                
+                                col1, col2 = st.columns([5, 1])
+                                with col1:
+                                    st.write(f"**{miles:.1f} mi** • {time_min:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi" + (f" • {hr} bpm" if hr > 0 else ""))
+                                with col2:
+                                    if st.button("🗑️", key=f"del_set_{idx}", use_container_width=True):
+                                        # Get the actual id from the dataframe
+                                        set_id = exercise_sets.loc[idx, 'id']
+                                        db.delete_set(set_id)
+                                        st.success("Deleted!")
+                                        st.rerun()
+                        else:
+                            # Strength training sets
+                            pr_data = db.get_exercise_pr(exercise_obj['id'])
+                            max_weight_today = exercise_sets['weight'].max()
+                            is_pr_today = False
+                            
+                            if pr_data['max_weight']:
+                                if max_weight_today >= pr_data['max_weight']['max_weight']:
+                                    is_pr_today = True
+                            
+                            # Display sets with delete buttons
+                            for idx, row in exercise_sets.iterrows():
+                                col1, col2, col3, col4, col5 = st.columns([1, 1, 1.5, 2, 1])
+                                
+                                with col1:
+                                    st.write(f"**Set {row['set_number']}**")
+                                with col2:
+                                    st.write(f"{row['reps']} reps")
+                                with col3:
+                                    st.write(f"{row['weight']} lbs")
+                                with col4:
+                                    volume = row['reps'] * row['weight']
+                                    est_1rm = calculate_estimated_1rm(row['weight'], row['reps'])
+                                    st.caption(f"Vol: {volume:,.0f} • 1RM: {est_1rm:.0f}")
+                                with col5:
+                                    if st.button("🗑️", key=f"del_set_{row['id']}", use_container_width=True):
+                                        db.delete_set(row['id'])
+                                        st.success("Deleted!")
+                                        st.rerun()
+                            
+                            st.divider()
+                            
+                            # Summary stats
+                            total_volume = (exercise_sets['reps'] * exercise_sets['weight']).sum()
+                            max_weight = exercise_sets['weight'].max()
+                            
+                            col1, col2 = st.columns(2)
+                            col1.metric("Total Volume", f"{total_volume:,.0f}")
+                            col2.metric("Max Weight", f"{max_weight} lbs")
+                            
+                            if is_pr_today:
+                                st.markdown('<span class="pr-badge">🏆 PR!</span>', unsafe_allow_html=True)
 # ==================== PR RECORDS PAGE ====================
 
 elif page == "PR Records":
@@ -1511,6 +1464,7 @@ else:
                         db.delete_exercise(exercise['id'])
                         st.success(f"Deleted {exercise['name']}")
                         st.rerun()
+
 
 
 
