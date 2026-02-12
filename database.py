@@ -159,6 +159,7 @@ def init_database():
         conn.commit()
     
     migrate_exercises_for_multiuser()
+    migrate_unique_constraints()
 
 # ==================== CATEGORIES ====================
 
@@ -1214,6 +1215,7 @@ def migrate_unique_constraints():
             """)
         
         conn.commit()
+
 
 
 
