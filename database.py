@@ -1166,6 +1166,54 @@ def migrate_exercises_for_multiuser():
 
 
 
+def migrate_unique_constraints():
+    """Fix unique constraints for multi-user support"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Check existing constraints on exercises table
+        cursor.execute("""
+            SELECT constraint_name 
+            FROM information_schema.table_constraints 
+            WHERE table_name = 'exercises' 
+            AND constraint_type = 'UNIQUE'
+        """)
+        constraints = [row['constraint_name'] for row in cursor.fetchall()]
+        
+        # Drop old single-column constraint if it exists
+        if 'exercises_name_key' in constraints:
+            cursor.execute("ALTER TABLE exercises DROP CONSTRAINT exercises_name_key")
+        
+        # Add correct composite constraint if missing
+        if 'exercises_name_user_id_key' not in constraints:
+            cursor.execute("""
+                ALTER TABLE exercises 
+                ADD CONSTRAINT exercises_name_user_id_key 
+                UNIQUE (name, user_id)
+            """)
+        
+        # Check existing constraints on categories table
+        cursor.execute("""
+            SELECT constraint_name 
+            FROM information_schema.table_constraints 
+            WHERE table_name = 'categories' 
+            AND constraint_type = 'UNIQUE'
+        """)
+        constraints = [row['constraint_name'] for row in cursor.fetchall()]
+        
+        # Drop old single-column constraint if it exists
+        if 'categories_name_key' in constraints:
+            cursor.execute("ALTER TABLE categories DROP CONSTRAINT categories_name_key")
+        
+        # Add correct composite constraint if missing
+        if 'categories_name_user_id_key' not in constraints:
+            cursor.execute("""
+                ALTER TABLE categories 
+                ADD CONSTRAINT categories_name_user_id_key 
+                UNIQUE (name, user_id)
+            """)
+        
+        conn.commit()
 
 
 
