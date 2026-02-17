@@ -6,9 +6,13 @@ Handles user registration, login, and session management
 import streamlit as st
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from streamlit_cookies_controller import CookieController
+
+COOKIE_NAME = "workout_session_token"
+TOKEN_EXPIRY_DAYS = 30
 
 def get_connection_string():
     """Get PostgreSQL connection string from Streamlit secrets"""
@@ -65,10 +69,8 @@ def init_auth_tables():
         
         email_col = cursor.fetchone()
         if email_col and email_col['is_nullable'] == 'NO':
-            # Make email nullable and remove UNIQUE constraint if it exists
             try:
                 cursor.execute("ALTER TABLE users ALTER COLUMN email DROP NOT NULL")
-                # Try to drop the unique constraint on email (may not exist)
                 cursor.execute("""
                     DO $$ 
                     BEGIN
@@ -79,12 +81,23 @@ def init_auth_tables():
                 """)
                 conn.commit()
             except Exception as alter_error:
-                # If alter fails, continue - might already be nullable
                 conn.rollback()
                 pass
         
+        # ── NEW: session tokens table ──────────────────────────────────────
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+                token TEXT UNIQUE NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_tokens_token ON session_tokens(token)")
+        # ──────────────────────────────────────────────────────────────────
+
         # Add user_id column to existing tables if they don't have it
-        # Check if column exists first
         cursor.execute("""
             SELECT column_name 
             FROM information_schema.columns 
@@ -111,6 +124,57 @@ def init_auth_tables():
         cursor.close()
         conn.close()
 
+# ── NEW: Token helpers ─────────────────────────────────────────────────────────
+
+def create_session_token(user_id: int) -> str:
+    """Generate a secure token, store it in DB, and return it"""
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now() + timedelta(days=TOKEN_EXPIRY_DAYS)
+    
+    conn = psycopg2.connect(get_connection_string(), cursor_factory=RealDictCursor)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO session_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)",
+            (user_id, token, expires_at)
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return token
+
+def validate_session_token(token: str) -> dict | None:
+    """Return user data if token is valid and not expired, else None"""
+    conn = psycopg2.connect(get_connection_string(), cursor_factory=RealDictCursor)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT u.user_id, u.username
+            FROM session_tokens st
+            JOIN users u ON st.user_id = u.user_id
+            WHERE st.token = %s AND st.expires_at > NOW()
+        """, (token,))
+        result = cursor.fetchone()
+        return dict(result) if result else None
+    finally:
+        cursor.close()
+        conn.close()
+
+def delete_session_token(token: str):
+    """Delete a token from the DB (used on logout)"""
+    conn = psycopg2.connect(get_connection_string(), cursor_factory=RealDictCursor)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM session_tokens WHERE token = %s", (token,))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+# ──────────────────────────────────────────────────────────────────────────────
+
 def create_user(username: str, password: str) -> tuple[bool, str]:
     """
     Create a new user account
@@ -120,22 +184,18 @@ def create_user(username: str, password: str) -> tuple[bool, str]:
     try:
         cursor = conn.cursor()
         
-        # Validate inputs
         if len(username) < 3:
             return False, "Username must be at least 3 characters"
         
         if len(password) < 6:
             return False, "Password must be at least 6 characters"
         
-        # Check if username already exists
         cursor.execute("SELECT user_id FROM users WHERE username = %s", (username,))
         if cursor.fetchone():
             return False, "Username already exists"
         
-        # Hash password
         hashed_password, salt = hash_password(password)
         
-        # Insert new user (email will be NULL)
         cursor.execute(
             """
             INSERT INTO users (username, password_hash, password_salt, created_at)
@@ -148,7 +208,7 @@ def create_user(username: str, password: str) -> tuple[bool, str]:
         user_id = cursor.fetchone()['user_id']
         conn.commit()
         
-        return True, f"Account created successfully!"
+        return True, "Account created successfully!"
     
     except Exception as e:
         conn.rollback()
@@ -183,21 +243,14 @@ def authenticate_user(username: str, password: str) -> tuple[bool, dict]:
         
         user_id, username, password_hash, password_salt = result.values()
         
-        # Verify password
         if verify_password(password, password_hash, password_salt):
-            # Update last login
             cursor.execute(
                 "UPDATE users SET last_login = %s WHERE user_id = %s",
                 (datetime.now(), user_id)
             )
             conn.commit()
             
-            user_data = {
-                'user_id': user_id,
-                'username': username
-            }
-            
-            return True, user_data
+            return True, {'user_id': user_id, 'username': username}
         else:
             return False, {}
     
@@ -217,12 +270,56 @@ def init_session_state():
         st.session_state.user_id = None
     if 'username' not in st.session_state:
         st.session_state.username = None
+    if 'session_token' not in st.session_state:
+        st.session_state.session_token = None
 
-def logout():
-    """Logout the current user"""
+def check_persistent_login(cookie_controller: CookieController) -> bool:
+    """
+    Check browser cookie for an existing session token and auto-login if valid.
+    Call this after init_session_state() when the user is not yet authenticated.
+    """
+    if st.session_state.get('authenticated'):
+        return True
+    
+    try:
+        token = cookie_controller.get(COOKIE_NAME)
+    except Exception:
+        return False
+
+    if not token:
+        return False
+    
+    user_data = validate_session_token(token)
+    if user_data:
+        st.session_state.authenticated = True
+        st.session_state.user_id = user_data['user_id']
+        st.session_state.username = user_data['username']
+        st.session_state.session_token = token
+        return True
+    
+    # Token expired or invalid — clear the stale cookie
+    try:
+        cookie_controller.remove(COOKIE_NAME)
+    except Exception:
+        pass
+    return False
+
+def logout(cookie_controller: CookieController = None):
+    """Logout the current user and clear the persistent cookie"""
+    token = st.session_state.get('session_token')
+    if token:
+        delete_session_token(token)
+    
+    if cookie_controller:
+        try:
+            cookie_controller.remove(COOKIE_NAME)
+        except Exception:
+            pass
+    
     st.session_state.authenticated = False
     st.session_state.user_id = None
     st.session_state.username = None
+    st.session_state.session_token = None
     # Clear workout session state
     if 'workout_id' in st.session_state:
         st.session_state.workout_id = None
@@ -231,7 +328,7 @@ def logout():
     if 'workout_date' in st.session_state:
         st.session_state.workout_date = None
 
-def login_page():
+def login_page(cookie_controller: CookieController):
     """Display login/signup page"""
     st.title("🏋️ Workout Tracker")
     
@@ -243,6 +340,7 @@ def login_page():
         with st.form("login_form"):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
+            remember_me = st.checkbox("Stay logged in for 30 days", value=True)
             submit = st.form_submit_button("Login", use_container_width=True, type="primary")
             
             if submit:
@@ -255,6 +353,16 @@ def login_page():
                         st.session_state.authenticated = True
                         st.session_state.user_id = user_data['user_id']
                         st.session_state.username = user_data['username']
+                        
+                        if remember_me:
+                            token = create_session_token(user_data['user_id'])
+                            cookie_controller.set(
+                                COOKIE_NAME,
+                                token,
+                                max_age=TOKEN_EXPIRY_DAYS * 86400  # seconds
+                            )
+                            st.session_state.session_token = token
+                        
                         st.success(f"Welcome back, {user_data['username']}!")
                         st.rerun()
                     else:
@@ -285,9 +393,9 @@ def login_page():
                         st.error(message)
 
 def require_auth():
-    """Decorator-like function to require authentication"""
+    """Decorator-like function to require authentication (no cookie support)"""
     if not st.session_state.get('authenticated', False):
-        login_page()
+        login_page(CookieController())
         st.stop()
 
 def get_current_user_id():
