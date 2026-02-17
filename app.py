@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import pytz
+from streamlit_cookies_controller import CookieController
 
 import database as db
 import utils
@@ -19,39 +20,34 @@ def get_today():
 def get_now():
     """Get current datetime in EST"""
     return datetime.now(EST)
-from streamlit_cookies_controller import CookieController
 
-cookie_controller = CookieController()  # must be before any st.write calls
-
-auth.init_session_state()
-auth.init_auth_tables()
-
-if not st.session_state.authenticated:
-    if not auth.check_persistent_login(cookie_controller):
-        auth.login_page(cookie_controller)
-        st.stop()
-# Page config
+# Page config - must be first Streamlit call
 st.set_page_config(
     page_title="Workout Tracker",
     page_icon="💪",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Cookie controller must be instantiated before any auth checks
+cookie_controller = CookieController()
+
 # Initialize authentication
 auth.init_session_state()
 auth.init_auth_tables()
 
-# Check if user is authenticated
+# Check if user is authenticated (including persistent cookie login)
 if not st.session_state.authenticated:
-    auth.login_page()
-    st.stop()  
+    if not auth.check_persistent_login(cookie_controller):
+        auth.login_page(cookie_controller)
+        st.stop()
 
 # Initialize database
 db.init_database()
 
 # Initialize session state
 if 'workout_id' not in st.session_state:
-    st.session_state.workout_id = None  # Changed from auto-create
+    st.session_state.workout_id = None
 if 'selected_category' not in st.session_state:
     st.session_state.selected_category = None
 if 'workout_active' not in st.session_state:
@@ -369,7 +365,7 @@ def get_user_categories():
 
 def is_running_category(category: str) -> bool:
     """Check if a category is a running category (for special handling)"""
-    running_keywords = ['run', 'running', 'cardio', 'jog', 'jogging']
+    running_keywords = ['run', 'running', 'cardio', 'jog', 'jogging', 'progression']
     category_lower = category.lower()
     return any(keyword in category_lower for keyword in running_keywords)
 
@@ -561,7 +557,6 @@ elif page == "Log Workout":
         
         with col1:
             if st.button("🏋️ Start Workout", use_container_width=True, type="primary"):
-                # Create or get today's workout
                 workout_id = db.get_or_create_todays_workout()
                 st.session_state.workout_id = workout_id
                 st.session_state.workout_active = True
@@ -584,7 +579,6 @@ elif page == "Log Workout":
     else:
         # ACTIVE WORKOUT - Show end button and workout interface
         
-        # END WORKOUT BUTTON at the top
         col1, col2 = st.columns([3, 1])
         with col1:
             st.success(f"✅ Workout Active")
@@ -630,11 +624,9 @@ elif page == "Log Workout":
             # Quick Start
             st.subheader("🚀 Quick Start")
             
-            # Get user's categories
             user_categories = db.get_all_categories_cached()
             
             if user_categories:
-                # Display category buttons dynamically based on user's categories
                 num_cols = 2
                 category_names = [c['name'] for c in user_categories]
                 
@@ -668,7 +660,6 @@ elif page == "Log Workout":
             
             exercise_names = [e['name'] for e in exercises]
             
-            # Set default index based on last exercise
             default_index = 0
             if st.session_state.last_exercise and st.session_state.last_exercise in exercise_names:
                 default_index = exercise_names.index(st.session_state.last_exercise)
@@ -683,23 +674,18 @@ elif page == "Log Workout":
             # Get exercise object
             exercise = db.get_exercise_by_name(selected_exercise)
             
-           # Determine if this is a cardio exercise
+            # Determine if this is a cardio exercise
             is_cardio = exercise and is_cardio_category(exercise['category'])
 
-            # Quick add form - mobile optimized
-            # Force form to reset when exercise changes by using exercise name in form key
             with st.form(key=f"quick_log_{selected_exercise}", clear_on_submit=False):
                 
-                # Check if we just logged a set for this exercise today
                 today_sets = db.get_sets_for_workout(st.session_state.workout_id)
                 
-                # Safely filter for current exercise - handle empty DataFrame
                 if not today_sets.empty and 'exercise' in today_sets.columns:
                     todays_sets_for_exercise = today_sets[today_sets['exercise'] == selected_exercise]
                 else:
                     todays_sets_for_exercise = pd.DataFrame()
 
-                # Show last session data
                 if exercise:
                     last_session = db.get_last_workout_for_exercise(
                         exercise['id'],
@@ -721,7 +707,6 @@ elif page == "Log Workout":
                             </div>
                             """, unsafe_allow_html=True)
                             
-                            # Use most recent set from today if exists, otherwise use last session
                             if not todays_sets_for_exercise.empty:
                                 most_recent = todays_sets_for_exercise.iloc[-1]
                                 default_miles = most_recent['reps'] / 10.0
@@ -741,7 +726,6 @@ elif page == "Log Workout":
                             </div>
                             """, unsafe_allow_html=True)
                             
-                            # Use most recent set from today if exists, otherwise use last session
                             if not todays_sets_for_exercise.empty:
                                 most_recent = todays_sets_for_exercise.iloc[-1]
                                 default_weight = float(most_recent['weight'])
@@ -750,7 +734,6 @@ elif page == "Log Workout":
                                 default_weight = max(s['weight'] for s in last_session['sets'])
                                 default_reps = last_session['sets'][0]['reps']
                     else:
-                        # No previous session - check today's sets or use defaults
                         if is_cardio:
                             if not todays_sets_for_exercise.empty:
                                 most_recent = todays_sets_for_exercise.iloc[-1]
@@ -770,23 +753,18 @@ elif page == "Log Workout":
                                 default_weight = 135.0
                                 default_reps = 10
                 else:
-                    # No exercise selected - use defaults
                     default_weight = 135.0
                     default_reps = 10
                     default_miles = 3.0
                     default_time = 30.0
                     default_hr = 140
                 
-                # Input fields
                 if is_cardio:
                     # CARDIO INPUTS
                     miles = st.number_input("Distance (miles)", min_value=0.1, max_value=50.0, value=default_miles, step=0.1)
-                    
                     time_minutes = st.number_input("Time (min)", min_value=1.0, max_value=500.0, value=default_time, step=1.0)
-                    
                     heart_rate = st.number_input("Avg HR (bpm)", min_value=0, max_value=220, value=default_hr, step=1)
                     
-                    # Show pace
                     if miles > 0:
                         pace = time_minutes / miles
                         st.info(f"**Pace:** {int(pace)}:{int((pace % 1) * 60):02d} min/mile")
@@ -799,7 +777,6 @@ elif page == "Log Workout":
                         elif time_minutes <= 0:
                             st.error("Time must be positive")
                         else:
-                            # Save to session state
                             st.session_state.last_exercise = selected_exercise
                             st.session_state.last_miles = miles
                             st.session_state.last_time = time_minutes
@@ -830,10 +807,8 @@ elif page == "Log Workout":
                 else:
                     # STRENGTH TRAINING INPUTS
                     reps = st.number_input("Reps", min_value=1, max_value=100, value=default_reps, step=1)
-                    
                     weight = st.number_input("Weight (lbs)", min_value=0.0, max_value=1000.0, value=default_weight, step=5.0)
                     
-                    # Show estimated 1RM
                     est_1rm = calculate_estimated_1rm(weight, reps)
                     st.info(f"**Est 1RM:** {est_1rm:.1f} lbs")
                     
@@ -845,7 +820,6 @@ elif page == "Log Workout":
                         if not valid:
                             st.error(error_msg)
                         else:
-                            # Save to session state
                             st.session_state.last_exercise = selected_exercise
                             st.session_state.last_reps = reps
                             st.session_state.last_weight = weight
@@ -883,12 +857,10 @@ elif page == "Log Workout":
             if sets_df.empty:
                 st.info("No sets logged yet")
             else:
-                # Group by exercise
                 for exercise_name in sets_df['exercise'].unique():
                     exercise_sets = sets_df[sets_df['exercise'] == exercise_name]
                     exercise_obj = db.get_exercise_by_name(exercise_name)
                     
-                    # Skip if exercise was deleted
                     if not exercise_obj:
                         st.warning(f"⚠️ Exercise '{exercise_name}' no longer exists")
                         continue
@@ -897,7 +869,6 @@ elif page == "Log Workout":
                     
                     with st.expander(f"**{exercise_name}**", expanded=True):
                         if is_cardio_exercise:
-                            # Display cardio sets with delete buttons
                             for idx, row in exercise_sets.iterrows():
                                 miles = row['reps'] / 10.0
                                 time_min = row['weight']
@@ -909,13 +880,11 @@ elif page == "Log Workout":
                                     st.write(f"**{miles:.1f} mi** • {time_min:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi" + (f" • {hr} bpm" if hr > 0 else ""))
                                 with col2:
                                     if st.button("🗑️", key=f"del_set_{idx}", use_container_width=True):
-                                        # Get the actual id from the dataframe
                                         set_id = exercise_sets.loc[idx, 'id']
                                         db.delete_set(set_id)
                                         st.success("Deleted!")
                                         st.rerun()
                         else:
-                            # Strength training sets
                             pr_data = db.get_exercise_pr(exercise_obj['id'])
                             max_weight_today = exercise_sets['weight'].max()
                             is_pr_today = False
@@ -924,7 +893,6 @@ elif page == "Log Workout":
                                 if max_weight_today >= pr_data['max_weight']['max_weight']:
                                     is_pr_today = True
                             
-                            # Display sets with delete buttons
                             for idx, row in exercise_sets.iterrows():
                                 col1, col2, col3, col4, col5 = st.columns([1, 1, 1.5, 2, 1])
                                 
@@ -946,7 +914,6 @@ elif page == "Log Workout":
                             
                             st.divider()
                             
-                            # Summary stats
                             total_volume = (exercise_sets['reps'] * exercise_sets['weight']).sum()
                             max_weight = exercise_sets['weight'].max()
                             
@@ -956,6 +923,7 @@ elif page == "Log Workout":
                             
                             if is_pr_today:
                                 st.markdown('<span class="pr-badge">🏆 PR!</span>', unsafe_allow_html=True)
+
 # ==================== PR RECORDS PAGE ====================
 
 elif page == "PR Records":
@@ -969,8 +937,9 @@ elif page == "PR Records":
         if not exercises:
             st.info("No exercises found")
         else:
-            strength_exercises = [e for e in exercises if e['category'] not in ["Easy Run", "Tempo Run", "Long Easy Run"]]
-            running_exercises = [e for e in exercises if e['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]]
+            # FIX: use is_running_category() instead of hardcoded list
+            strength_exercises = [e for e in exercises if not is_running_category(e['category'])]
+            running_exercises = [e for e in exercises if is_running_category(e['category'])]
             
             if strength_exercises:
                 st.markdown("### 💪 Strength PRs")
@@ -1033,7 +1002,8 @@ elif page == "Weekly Mileage":
     st.title("📏 Weekly Mileage")
     
     exercises = db.get_all_exercises_cached()
-    running_exercises = [e for e in exercises if e['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]]
+    # FIX: use is_running_category() instead of hardcoded list
+    running_exercises = [e for e in exercises if is_running_category(e['category'])]
     
     if not running_exercises:
         st.info("No running exercises")
@@ -1066,7 +1036,6 @@ elif page == "Weekly Mileage":
             pct_increase = ((current_miles - last_week_miles) / last_week_miles * 100) if last_week_miles > 0 else 0
             
             col1, col2 = st.columns(2)
-            
             col1.metric("This Week", f"{current_miles:.1f} mi")
             col2.metric("Last Week", f"{last_week_miles:.1f} mi")
             
@@ -1134,7 +1103,6 @@ elif page == "History":
                 expander_title += " 📝"
             
             with st.expander(expander_title):
-                # Notes section
                 if workout['notes']:
                     st.markdown(f"""
                     <div class="notes-box">
@@ -1142,9 +1110,7 @@ elif page == "History":
                     </div>
                     """, unsafe_allow_html=True)
                 
-                # Display sets
                 if workout_details['sets']:
-                    # Group sets by exercise
                     sets_by_exercise = {}
                     for s in workout_details['sets']:
                         ex_name = s['exercise_name']
@@ -1152,15 +1118,13 @@ elif page == "History":
                             sets_by_exercise[ex_name] = []
                         sets_by_exercise[ex_name].append(s)
                     
-                    # Display each exercise
                     for exercise_name, exercise_sets in sets_by_exercise.items():
                         st.markdown(f"**{exercise_name}**")
                         
-                        # Check if running exercise
-                        is_running = exercise_sets and len(exercise_sets) > 0 and exercise_sets[0]['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
+                        # FIX: use is_running_category() instead of hardcoded list
+                        is_running = exercise_sets and len(exercise_sets) > 0 and is_running_category(exercise_sets[0]['category'])
                         
                         if is_running:
-                            # Display running sets
                             for s in exercise_sets:
                                 miles = s['reps'] / 10.0
                                 time_min = s['weight']
@@ -1176,7 +1140,6 @@ elif page == "History":
                                         st.success("Set deleted!")
                                         st.rerun()
                         else:
-                            # Display strength sets with edit capability
                             for s in exercise_sets:
                                 col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
                                 
@@ -1184,7 +1147,6 @@ elif page == "History":
                                     st.write(f"**Set {s['set_number']}**")
                                 
                                 with col2:
-                                    # Editable reps
                                     new_reps = st.number_input(
                                         "Reps",
                                         min_value=1,
@@ -1195,7 +1157,6 @@ elif page == "History":
                                     )
                                 
                                 with col3:
-                                    # Editable weight
                                     new_weight = st.number_input(
                                         "Weight",
                                         min_value=0.0,
@@ -1207,7 +1168,6 @@ elif page == "History":
                                     )
                                 
                                 with col4:
-                                    # Save/Delete buttons
                                     if new_reps != s['reps'] or new_weight != s['weight']:
                                         if st.button("💾", key=f"save_{s['id']}", use_container_width=True):
                                             db.update_set(s['id'], new_reps, new_weight)
@@ -1219,14 +1179,12 @@ elif page == "History":
                                             st.success("Set deleted!")
                                             st.rerun()
                                 
-                                # Show volume and 1RM
                                 volume = new_reps * new_weight
                                 est_1rm = calculate_estimated_1rm(new_weight, new_reps)
                                 st.caption(f"Vol: {volume:,.0f} • 1RM: {est_1rm:.0f} lbs")
                         
                         st.divider()
                 
-                # Edit notes button
                 with st.expander("✏️ Edit Notes"):
                     current_notes = workout['notes'] if workout['notes'] else ""
                     
@@ -1245,7 +1203,6 @@ elif page == "History":
                             st.success("Notes updated!")
                             st.rerun()
                 
-                # Delete entire workout
                 st.divider()
                 if st.button(f"🗑️ Delete Entire Workout", key=f"del_{workout['id']}", use_container_width=True, type="secondary"):
                     db.delete_workout(workout['id'])
@@ -1266,7 +1223,8 @@ elif page == "Progress":
         selected_exercise_name = st.selectbox("Exercise", exercise_names)
         
         exercise = db.get_exercise_by_name(selected_exercise_name)
-        is_running = exercise['category'] in ["Easy Run", "Tempo Run", "Long Easy Run"]
+        # FIX: use is_running_category() instead of hardcoded list
+        is_running = is_running_category(exercise['category'])
         
         if is_running:
             running_df = db.get_running_stats(exercise['id'])
@@ -1335,26 +1293,19 @@ elif page == "Progress":
 
 # ==================== MANAGE EXERCISES PAGE ====================
 
-# ==================== MANAGE EXERCISES PAGE ====================
-# THIS REPLACES THE ENTIRE "Manage Exercises" elif section
-# Find: elif page == "Manage Exercises":
-# Delete everything up to the next elif or the sidebar footer
-# Replace with this:
-
 elif page == "Manage Exercises":
     st.title("⚙️ Manage Exercises")
     
     # ==================== MANAGE CATEGORIES SECTION ====================
     st.subheader("📂 Manage Categories")
     
-    # Add new category
     with st.form("add_category"):
         col1, col2 = st.columns([3, 1])
         with col1:
             new_category_name = st.text_input("New Category Name", placeholder="e.g., Push Day, Pull Day, Legs")
         with col2:
-            st.write("")  # Spacing
-            st.write("")  # Spacing
+            st.write("")
+            st.write("")
             add_category_btn = st.form_submit_button("➕ Add Category", use_container_width=True)
         
         if add_category_btn:
@@ -1369,13 +1320,11 @@ elif page == "Manage Exercises":
                     st.success(f"Added category: {new_category_name}")
                     st.rerun()
     
-    # Display existing categories
     categories = db.get_all_categories_cached()
     
     if categories:
         st.write("**Your Categories:**")
         
-        # Create a grid of category chips with delete buttons
         num_cols = 3
         for i in range(0, len(categories), num_cols):
             cols = st.columns(num_cols)
@@ -1386,7 +1335,6 @@ elif page == "Manage Exercises":
                         st.write(f"📁 {category['name']}")
                     with col2:
                         if st.button("🗑️", key=f"del_cat_{category['id']}", use_container_width=True):
-                            # Check if any exercises use this category
                             exercises = db.get_all_exercises_cached()
                             category_in_use = any(e['category'] == category['name'] for e in exercises)
                             
@@ -1404,86 +1352,74 @@ elif page == "Manage Exercises":
     # ==================== MANAGE EXERCISES SECTION ====================
     st.subheader("💪 Manage Exercises")
     
-   # Add new exercise
-with st.form("add_exercise"):
-    st.write("**Add New Exercise**")
-    
-    new_exercise_name = st.text_input("Exercise Name", placeholder="e.g., Bench Press, Squats, Running")
-    
-    # Get categories for dropdown - SAFELY
-    categories = db.get_all_categories_cached()
-    
-    # Ensure categories is never None
-    if categories is None:
-        categories = []
-    
-    category_names = [c['name'] for c in categories]
-    
-    if not category_names:
-        st.warning("⚠️ Please add at least one category first")
-        new_category = None
-        submitted = st.form_submit_button("➕ Add Exercise", use_container_width=True, disabled=True)
-    else:
-        new_category = st.selectbox("Category", category_names)
-        submitted = st.form_submit_button("➕ Add Exercise", use_container_width=True)
-    
-    if submitted:
-        if not new_exercise_name:
-            st.error("Please enter an exercise name")
-        elif not category_names:
-            st.error("Please create a category first")
-        else:
-            existing = db.get_exercise_by_name(new_exercise_name)
-            if existing:
-                st.warning(f"✅ '{new_exercise_name}' already exists in your exercises")
-            else:
-                db.add_exercise(new_exercise_name, new_category)
-                st.success(f"Added {new_exercise_name}")
-                st.rerun()
-st.divider()
-
-# Display exercises grouped by category
-st.subheader("Your Exercises")
-exercises = db.get_all_exercises_cached()
-
-if not exercises:
-    st.info("No exercises yet. Add your first exercise above!")
-else:
-    # Group exercises by category
-    df = pd.DataFrame(exercises)
-    
-    for category in category_names:
-        category_exercises = df[df['category'] == category]
+    with st.form("add_exercise"):
+        st.write("**Add New Exercise**")
         
-        if not category_exercises.empty:
-            with st.expander(f"📁 {category} ({len(category_exercises)})", expanded=True):
-                for _, exercise in category_exercises.iterrows():
+        new_exercise_name = st.text_input("Exercise Name", placeholder="e.g., Bench Press, Squats, Running")
+        
+        categories = db.get_all_categories_cached()
+        if categories is None:
+            categories = []
+        
+        category_names = [c['name'] for c in categories]
+        
+        if not category_names:
+            st.warning("⚠️ Please add at least one category first")
+            new_category = None
+            submitted = st.form_submit_button("➕ Add Exercise", use_container_width=True, disabled=True)
+        else:
+            new_category = st.selectbox("Category", category_names)
+            submitted = st.form_submit_button("➕ Add Exercise", use_container_width=True)
+        
+        if submitted:
+            if not new_exercise_name:
+                st.error("Please enter an exercise name")
+            elif not category_names:
+                st.error("Please create a category first")
+            else:
+                existing = db.get_exercise_by_name(new_exercise_name)
+                if existing:
+                    st.warning(f"✅ '{new_exercise_name}' already exists in your exercises")
+                else:
+                    db.add_exercise(new_exercise_name, new_category)
+                    st.success(f"Added {new_exercise_name}")
+                    st.rerun()
+    
+    st.divider()
+    
+    st.subheader("Your Exercises")
+    exercises = db.get_all_exercises_cached()
+    
+    if not exercises:
+        st.info("No exercises yet. Add your first exercise above!")
+    else:
+        df = pd.DataFrame(exercises)
+        
+        for category in category_names:
+            category_exercises = df[df['category'] == category]
+            
+            if not category_exercises.empty:
+                with st.expander(f"📁 {category} ({len(category_exercises)})", expanded=True):
+                    for _, exercise in category_exercises.iterrows():
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            st.write(f"• {exercise['name']}")
+                        with col2:
+                            if st.button("🗑️", key=f"del_ex_{exercise['id']}", use_container_width=True):
+                                db.delete_exercise(exercise['id'])
+                                st.success(f"Deleted {exercise['name']}")
+                                st.rerun()
+        
+        orphaned_exercises = df[~df['category'].isin(category_names)]
+        if not orphaned_exercises.empty:
+            with st.expander(f"⚠️ Uncategorized ({len(orphaned_exercises)})", expanded=False):
+                st.warning("These exercises have invalid categories. Consider deleting them.")
+                for _, exercise in orphaned_exercises.iterrows():
                     col1, col2 = st.columns([4, 1])
                     with col1:
-                        st.write(f"• {exercise['name']}")
+                        st.write(f"• {exercise['name']} (Category: {exercise['category']})")
                     with col2:
-                        if st.button("🗑️", key=f"del_ex_{exercise['id']}", use_container_width=True):
+                        if st.button("🗑️", key=f"del_ex_orphan_{exercise['id']}", use_container_width=True):
                             db.delete_exercise(exercise['id'])
                             st.success(f"Deleted {exercise['name']}")
                             st.rerun()
-    
-    # Show exercises with no category or deleted category
-    orphaned_exercises = df[~df['category'].isin(category_names)]
-    if not orphaned_exercises.empty:
-        with st.expander(f"⚠️ Uncategorized ({len(orphaned_exercises)})", expanded=False):
-            st.warning("These exercises have invalid categories. Consider deleting them.")
-            for _, exercise in orphaned_exercises.iterrows():
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"• {exercise['name']} (Category: {exercise['category']})")
-                with col2:
-                    if st.button("🗑️", key=f"del_ex_orphan_{exercise['id']}", use_container_width=True):
-                        db.delete_exercise(exercise['id'])
-                        st.success(f"Deleted {exercise['name']}")
-                        st.rerun()
-
-
-
-
-
-
