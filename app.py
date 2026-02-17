@@ -19,7 +19,17 @@ def get_today():
 def get_now():
     """Get current datetime in EST"""
     return datetime.now(EST)
+from streamlit_cookies_controller import CookieController
 
+cookie_controller = CookieController()  # must be before any st.write calls
+
+auth.init_session_state()
+auth.init_auth_tables()
+
+if not st.session_state.authenticated:
+    if not auth.check_persistent_login(cookie_controller):
+        auth.login_page(cookie_controller)
+        st.stop()
 # Page config
 st.set_page_config(
     page_title="Workout Tracker",
@@ -319,6 +329,13 @@ page = st.sidebar.radio(
     ["📊 Dashboard", "📝 Log Workout", "🏆 PR Records", "📏 Weekly Mileage", "📅 History", "📈 Progress", "⚙️ Manage Exercises"],
     label_visibility="collapsed"
 )
+
+# Logout button
+st.sidebar.divider()
+st.sidebar.caption(f"👤 {st.session_state.username}")
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    auth.logout(cookie_controller)
+    st.rerun()
 
 # Clean up page names (remove emojis for internal use)
 page = page.split(" ", 1)[1] if " " in page else page
@@ -1464,6 +1481,7 @@ else:
                         db.delete_exercise(exercise['id'])
                         st.success(f"Deleted {exercise['name']}")
                         st.rerun()
+
 
 
 
