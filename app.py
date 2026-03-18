@@ -1,14 +1,10 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import pytz
-from streamlit_cookies_controller import CookieController
 
 import database as db
 import utils
-import auth
 
 # Set timezone to EST
 EST = pytz.timezone('America/New_York')
@@ -21,26 +17,13 @@ def get_now():
     """Get current datetime in EST"""
     return datetime.now(EST)
 
-# Page config - must be first Streamlit call
+# Page config
 st.set_page_config(
     page_title="Workout Tracker",
     page_icon="💪",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-# Cookie controller must be instantiated before any auth checks
-cookie_controller = CookieController()
-
-# Initialize authentication
-auth.init_session_state()
-auth.init_auth_tables()
-
-# Check if user is authenticated (including persistent cookie login)
-if not st.session_state.authenticated:
-    if not auth.check_persistent_login(cookie_controller):
-        auth.login_page(cookie_controller)
-        st.stop()
 
 # Initialize database
 db.init_database()
@@ -82,20 +65,6 @@ st.markdown("""
     /* Better spacing on mobile */
     .element-container {
         margin-bottom: 0.5rem;
-    }
-    
-    /* Responsive metric cards */
-    [data-testid="stMetricValue"] {
-        font-size: clamp(1.5rem, 4vw, 2.5rem);
-    }
-    
-    [data-testid="stMetricLabel"] {
-        font-size: clamp(0.875rem, 2.5vw, 1rem);
-    }
-    
-    /* Mobile-friendly tables */
-    .dataframe {
-        font-size: 0.9rem;
     }
     
     /* Responsive padding */
@@ -187,74 +156,12 @@ st.markdown("""
     }
     
     /* Custom styled components */
-    .success-message {
-        padding: 0.75rem;
-        border-radius: 0.5rem;
-        background-color: #d4edda;
-        color: #155724;
-        margin: 0.5rem 0;
-        font-size: 1rem;
-    }
-    
-    .pr-badge {
-        background-color: #ffd700;
-        color: #000;
-        padding: 0.4rem 0.75rem;
-        border-radius: 0.3rem;
-        font-weight: bold;
-        font-size: 1rem;
-    }
-    
     .last-session {
         background-color: #e7f3ff;
         padding: 0.75rem;
         border-radius: 0.5rem;
         border-left: 4px solid #2196F3;
         margin: 0.75rem 0;
-        font-size: 1rem;
-    }
-    
-    .category-button {
-        background-color: #f0f2f6;
-        padding: 0.75rem;
-        border-radius: 0.5rem;
-        text-align: center;
-        margin: 0.25rem;
-        min-height: 3rem;
-    }
-    
-    .pr-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1.25rem;
-        border-radius: 0.5rem;
-        margin: 0.75rem 0;
-    }
-    
-    .recent-pr {
-        background-color: #fff3cd;
-        border-left: 4px solid #ffd700;
-        padding: 1rem;
-        margin: 0.75rem 0;
-        border-radius: 0.5rem;
-        font-size: 1rem;
-    }
-    
-    .warning-box {
-        background-color: #fff3cd;
-        border-left: 4px solid #ffc107;
-        padding: 1rem;
-        margin: 0.75rem 0;
-        border-radius: 0.5rem;
-        font-size: 1rem;
-    }
-    
-    .info-box {
-        background-color: #d1ecf1;
-        border-left: 4px solid #17a2b8;
-        padding: 1rem;
-        margin: 0.75rem 0;
-        border-radius: 0.5rem;
         font-size: 1rem;
     }
     
@@ -266,31 +173,6 @@ st.markdown("""
         border-radius: 0.5rem;
         font-style: italic;
         font-size: 1rem;
-    }
-    
-    .metric-card {
-        background-color: white;
-        padding: 1.5rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-left: 4px solid #667eea;
-        margin-bottom: 1rem;
-    }
-    
-    .streak-badge {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        color: white;
-        padding: 0.75rem 1.25rem;
-        border-radius: 2rem;
-        font-weight: bold;
-        display: inline-block;
-        margin: 0.5rem 0;
-        font-size: 1.1rem;
-    }
-    
-    /* Larger tap targets for charts */
-    .js-plotly-plot .plotly {
-        min-height: 300px;
     }
     
     /* Better form submit buttons */
@@ -319,19 +201,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Sidebar navigation with mobile-friendly icons
+# Sidebar navigation
 page = st.sidebar.radio(
     "Navigate",
-    ["📊 Dashboard", "📝 Log Workout", "🏆 PR Records", "📏 Weekly Mileage", "📅 History", "📈 Progress", "⚙️ Manage Exercises"],
+    ["📝 Log Workout", "📅 History", "⚙️ Manage Exercises"],
     label_visibility="collapsed"
 )
-
-# Logout button
-st.sidebar.divider()
-st.sidebar.caption(f"👤 {st.session_state.username}")
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    auth.logout(cookie_controller)
-    st.rerun()
 
 # Clean up page names (remove emojis for internal use)
 page = page.split(" ", 1)[1] if " " in page else page
@@ -340,7 +215,7 @@ page = page.split(" ", 1)[1] if " " in page else page
 
 def is_cardio_category(category: str) -> bool:
     """Check if a category is a cardio category (for special handling)"""
-    cardio_keywords = ['cardio', 'run', 'running', 'bike', 'cycling', 'swim', 'swimming', 'row', 'rowing']
+    cardio_keywords = ['cardio', 'run', 'running', 'bike', 'cycling', 'swim', 'swimming', 'row', 'rowing', 'progression']
     category_lower = category.lower()
     return any(keyword in category_lower for keyword in cardio_keywords)
     
@@ -349,178 +224,15 @@ def get_exercises_by_category(category: str):
     all_exercises = db.get_all_exercises_cached()
     return [e for e in all_exercises if e['category'] == category]
 
-def get_active_categories():
-    """Get categories that have at least one exercise"""
-    all_exercises = db.get_all_exercises_cached()
-    if not all_exercises:
-        return []
-    
-    df = pd.DataFrame(all_exercises)
-    return df['category'].unique().tolist()
-
-def get_user_categories():
-    """Get user's defined categories"""
-    categories = db.get_all_categories_cached()
-    return [c['name'] for c in categories]
-
-def is_running_category(category: str) -> bool:
-    """Check if a category is a running category (for special handling)"""
-    running_keywords = ['run', 'running', 'cardio', 'jog', 'jogging', 'progression']
-    category_lower = category.lower()
-    return any(keyword in category_lower for keyword in running_keywords)
-
 def calculate_estimated_1rm(weight: float, reps: int) -> float:
     """Calculate estimated 1RM using Epley formula"""
     if reps == 1:
         return weight
     return weight * (1 + reps / 30.0)
 
-# ==================== DASHBOARD PAGE ====================
-
-if page == "Dashboard":
-    st.title("📊 Training Dashboard")
-    
-    # Get current week dates
-    today = get_today()
-    start_of_week = today - timedelta(days=today.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
-    
-    # Get last week dates
-    start_of_last_week = start_of_week - timedelta(days=7)
-    end_of_last_week = start_of_week - timedelta(days=1)
-    
-    st.caption(f"Week of {start_of_week.strftime('%b %d')} - {end_of_week.strftime('%b %d, %Y')}")
-    
-    # Get weekly stats
-    this_week_stats = db.get_week_summary(start_of_week.isoformat(), end_of_week.isoformat())
-    last_week_stats = db.get_week_summary(start_of_last_week.isoformat(), end_of_last_week.isoformat())
-    
-    # Get workout streak
-    streak = db.get_workout_streak()
-    
-    # Top row - Key metrics (mobile will stack these)
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        volume_change = this_week_stats['total_volume'] - last_week_stats['total_volume']
-        volume_pct = (volume_change / last_week_stats['total_volume'] * 100) if last_week_stats['total_volume'] > 0 else 0
-        col1.metric(
-            "Volume",
-            f"{this_week_stats['total_volume']:,.0f} lbs",
-            delta=f"{volume_pct:+.1f}%"
-        )
-    
-    with col2:
-        mileage_change = this_week_stats['total_miles'] - last_week_stats['total_miles']
-        col2.metric(
-            "Miles",
-            f"{this_week_stats['total_miles']:.1f} mi",
-            delta=f"{mileage_change:+.1f}"
-        )
-    
-    col3, col4 = st.columns(2)
-    
-    with col3:
-        col3.metric(
-            "Workouts",
-            f"{this_week_stats['num_workouts']}",
-            delta=f"{this_week_stats['num_workouts'] - last_week_stats['num_workouts']:+d}"
-        )
-    
-    with col4:
-        if streak > 0:
-            col4.markdown(f"""
-            <div class="streak-badge">
-                🔥 {streak} Day Streak
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            days_since = db.get_days_since_last_workout()
-            if days_since == 999:
-                col4.metric("Last Workout", "None yet")
-            else:
-                col4.metric("Days Since", f"{days_since}")
-    
-    st.divider()
-    
-    # Charts section
-    st.subheader("📊 Training Split")
-    
-    category_volume = db.get_category_volume_this_week(start_of_week.isoformat(), end_of_week.isoformat())
-    
-    if not category_volume.empty:
-        fig = px.pie(
-            category_volume,
-            values='volume',
-            names='category',
-            title='Volume by Muscle Group',
-            hole=0.4
-        )
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(
-            height=400,
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No strength training logged this week")
-    
-    st.divider()
-    
-    st.subheader("📈 Volume Trend")
-    
-    weekly_volume = db.get_weekly_volume_trend(weeks=8)
-    
-    if not weekly_volume.empty:
-        weekly_volume['week_label'] = weekly_volume.apply(
-            lambda row: f"Wk {row['week']}", axis=1
-        )
-        
-        fig = px.bar(
-            weekly_volume,
-            x='week_label',
-            y='volume',
-            title='Last 8 Weeks'
-        )
-        fig.update_layout(
-            xaxis_title="",
-            yaxis_title="Volume (lbs)",
-            showlegend=False,
-            height=350
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Not enough data for trend")
-    
-    st.divider()
-    
-    # Recent PRs
-    st.subheader("🏆 Recent PRs")
-    
-    recent_prs = db.get_recent_prs(days=7)
-    
-    if not recent_prs:
-        st.info("No PRs in the last 7 days")
-    else:
-        for pr in recent_prs[:3]:
-            st.markdown(f"""
-            <div class="recent-pr">
-                <strong>{pr['exercise_name']}</strong> - {pr['pr_type'].upper()}<br>
-                <strong>{pr['value']:.1f}</strong> {pr['context']}<br>
-                <small>{pr['achieved_date']}</small>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Quick actions
-    st.subheader("⚡ Quick Actions")
-    st.info("💡 Use the menu (☰) to navigate between pages")
-
 # ==================== LOG WORKOUT PAGE ====================
 
-elif page == "Log Workout":
+if page == "Log Workout":
     st.title("📝 Log Workout")
     
     # Get today's date
@@ -614,50 +326,47 @@ elif page == "Log Workout":
                 db.update_workout_notes(st.session_state.workout_id, notes)
                 st.success("Notes saved!")
         
-        # Get categories with exercises
-        active_categories = get_active_categories()
+        # Quick Start
+        st.subheader("🚀 Quick Start")
         
-        if not active_categories:
+        user_categories = db.get_all_categories_cached()
+        
+        if user_categories:
+            num_cols = 2
+            category_names = [c['name'] for c in user_categories]
+            
+            for i in range(0, len(category_names), num_cols):
+                cols = st.columns(num_cols)
+                
+                for idx, category_name in enumerate(category_names[i:i+num_cols]):
+                    with cols[idx]:
+                        if st.button(category_name, key=f"cat_{category_name}", use_container_width=True):
+                            st.session_state.selected_category = category_name
+                            st.success(f"✓ {category_name}")
+                            st.rerun()
+        else:
+            st.info("💡 No categories yet. Go to ⚙️ Manage Exercises to create your workout splits!")
+        
+        # Show selected category
+        if st.session_state.selected_category:
+            st.info(f"**Active:** {st.session_state.selected_category}")
+            if st.button("❌ Show All", use_container_width=True):
+                st.session_state.selected_category = None
+                st.rerun()
+            
+            exercises = get_exercises_by_category(st.session_state.selected_category)
+        else:
+            exercises = db.get_all_exercises_cached()
+        
+        st.divider()
+        
+        # Exercise selector OUTSIDE the form
+        st.subheader("Add Set")
+        
+        if not exercises:
             st.warning("⚠️ No exercises found")
             st.info("Add exercises in ⚙️ Manage Exercises")
         else:
-            # Quick Start
-            st.subheader("🚀 Quick Start")
-            
-            user_categories = db.get_all_categories_cached()
-            
-            if user_categories:
-                num_cols = 2
-                category_names = [c['name'] for c in user_categories]
-                
-                for i in range(0, len(category_names), num_cols):
-                    cols = st.columns(num_cols)
-                    
-                    for idx, category_name in enumerate(category_names[i:i+num_cols]):
-                        with cols[idx]:
-                            if st.button(category_name, key=f"cat_{category_name}", use_container_width=True):
-                                st.session_state.selected_category = category_name
-                                st.success(f"✓ {category_name}")
-                                st.rerun()
-            else:
-                st.info("💡 No categories yet. Go to ⚙️ Manage Exercises to create your workout splits!")
-            
-            # Show selected category
-            if st.session_state.selected_category:
-                st.info(f"**Active:** {st.session_state.selected_category}")
-                if st.button("❌ Show All", use_container_width=True):
-                    st.session_state.selected_category = None
-                    st.rerun()
-                
-                exercises = get_exercises_by_category(st.session_state.selected_category)
-            else:
-                exercises = db.get_all_exercises_cached()
-            
-            st.divider()
-            
-            # Exercise selector OUTSIDE the form
-            st.subheader("Add Set")
-            
             exercise_names = [e['name'] for e in exercises]
             
             default_index = 0
@@ -847,238 +556,71 @@ elif page == "Log Workout":
                                 st.success(f"✅ {reps} reps @ {weight} lbs")
                             
                             st.rerun()
-            
-            # Display today's workout
-            st.divider()
-            st.subheader("Today's Sets")
-            
-            sets_df = db.get_sets_for_workout(st.session_state.workout_id)
-            
-            if sets_df.empty:
-                st.info("No sets logged yet")
-            else:
-                for exercise_name in sets_df['exercise'].unique():
-                    exercise_sets = sets_df[sets_df['exercise'] == exercise_name]
-                    exercise_obj = db.get_exercise_by_name(exercise_name)
-                    
-                    if not exercise_obj:
-                        st.warning(f"⚠️ Exercise '{exercise_name}' no longer exists")
-                        continue
-                    
-                    is_cardio_exercise = is_cardio_category(exercise_obj['category'])
-                    
-                    with st.expander(f"**{exercise_name}**", expanded=True):
-                        if is_cardio_exercise:
-                            for idx, row in exercise_sets.iterrows():
-                                miles = row['reps'] / 10.0
-                                time_min = row['weight']
-                                pace = time_min / miles if miles > 0 else 0
-                                hr = row['set_number']
-                                
-                                col1, col2 = st.columns([5, 1])
-                                with col1:
-                                    st.write(f"**{miles:.1f} mi** • {time_min:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi" + (f" • {hr} bpm" if hr > 0 else ""))
-                                with col2:
-                                    if st.button("🗑️", key=f"del_set_{idx}", use_container_width=True):
-                                        set_id = exercise_sets.loc[idx, 'id']
-                                        db.delete_set(set_id)
-                                        st.success("Deleted!")
-                                        st.rerun()
-                        else:
-                            pr_data = db.get_exercise_pr(exercise_obj['id'])
-                            max_weight_today = exercise_sets['weight'].max()
-                            is_pr_today = False
-                            
-                            if pr_data['max_weight']:
-                                if max_weight_today >= pr_data['max_weight']['max_weight']:
-                                    is_pr_today = True
-                            
-                            for idx, row in exercise_sets.iterrows():
-                                col1, col2, col3, col4, col5 = st.columns([1, 1, 1.5, 2, 1])
-                                
-                                with col1:
-                                    st.write(f"**Set {row['set_number']}**")
-                                with col2:
-                                    st.write(f"{row['reps']} reps")
-                                with col3:
-                                    st.write(f"{row['weight']} lbs")
-                                with col4:
-                                    volume = row['reps'] * row['weight']
-                                    est_1rm = calculate_estimated_1rm(row['weight'], row['reps'])
-                                    st.caption(f"Vol: {volume:,.0f} • 1RM: {est_1rm:.0f}")
-                                with col5:
-                                    if st.button("🗑️", key=f"del_set_{row['id']}", use_container_width=True):
-                                        db.delete_set(row['id'])
-                                        st.success("Deleted!")
-                                        st.rerun()
-                            
-                            st.divider()
-                            
-                            total_volume = (exercise_sets['reps'] * exercise_sets['weight']).sum()
-                            max_weight = exercise_sets['weight'].max()
-                            
-                            col1, col2 = st.columns(2)
-                            col1.metric("Total Volume", f"{total_volume:,.0f}")
-                            col2.metric("Max Weight", f"{max_weight} lbs")
-                            
-                            if is_pr_today:
-                                st.markdown('<span class="pr-badge">🏆 PR!</span>', unsafe_allow_html=True)
-
-# ==================== PR RECORDS PAGE ====================
-
-elif page == "PR Records":
-    st.title("🏆 Personal Records")
-    
-    tab1, tab2 = st.tabs(["All PRs", "Recent"])
-    
-    with tab1:
-        exercises = db.get_all_exercises_cached()
         
-        if not exercises:
-            st.info("No exercises found")
+        # Display today's workout
+        st.divider()
+        st.subheader("Today's Sets")
+        
+        sets_df = db.get_sets_for_workout(st.session_state.workout_id)
+        
+        if sets_df.empty:
+            st.info("No sets logged yet")
         else:
-            # FIX: use is_running_category() instead of hardcoded list
-            strength_exercises = [e for e in exercises if not is_running_category(e['category'])]
-            running_exercises = [e for e in exercises if is_running_category(e['category'])]
-            
-            if strength_exercises:
-                st.markdown("### 💪 Strength PRs")
+            for exercise_name in sets_df['exercise'].unique():
+                exercise_sets = sets_df[sets_df['exercise'] == exercise_name]
+                exercise_obj = db.get_exercise_by_name(exercise_name)
                 
-                pr_data = []
-                for exercise in strength_exercises:
-                    prs = db.get_exercise_pr(exercise['id'])
-                    
-                    if prs['max_weight']:
-                        pr_data.append({
-                            'Exercise': exercise['name'],
-                            'Max': f"{prs['max_weight']['max_weight']:.0f} lbs",
-                            'Date': prs['max_weight']['workout_date']
-                        })
+                if not exercise_obj:
+                    st.warning(f"⚠️ Exercise '{exercise_name}' no longer exists")
+                    continue
                 
-                if pr_data:
-                    df = pd.DataFrame(pr_data)
-                    st.dataframe(df, hide_index=True, use_container_width=True)
-            
-            if running_exercises:
-                st.divider()
-                st.markdown("### 🏃 Running PRs")
+                is_cardio_exercise = is_cardio_category(exercise_obj['category'])
                 
-                run_pr_data = []
-                for exercise in running_exercises:
-                    prs = db.get_running_prs(exercise['id'])
-                    
-                    if prs['fastest_pace']:
-                        pace = prs['fastest_pace']['pace']
-                        run_pr_data.append({
-                            'Type': exercise['name'],
-                            'Pace': f"{int(pace)}:{int((pace % 1) * 60):02d}",
-                            'Date': prs['fastest_pace']['date']
-                        })
-                
-                if run_pr_data:
-                    df = pd.DataFrame(run_pr_data)
-                    st.dataframe(df, hide_index=True, use_container_width=True)
-    
-    with tab2:
-        st.subheader("Last 30 Days")
-        
-        recent_prs = db.get_recent_prs(days=30)
-        
-        if not recent_prs:
-            st.info("No PRs in last 30 days")
-        else:
-            for pr in recent_prs[:5]:
-                st.markdown(f"""
-                <div class="recent-pr">
-                    <strong>🏆 {pr['exercise_name']}</strong><br>
-                    <strong>{pr['value']:.1f}</strong> {pr['context']}<br>
-                    <small>{pr['achieved_date']}</small>
-                </div>
-                """, unsafe_allow_html=True)
-
-# ==================== WEEKLY MILEAGE PAGE ====================
-
-elif page == "Weekly Mileage":
-    st.title("📏 Weekly Mileage")
-    
-    exercises = db.get_all_exercises_cached()
-    # FIX: use is_running_category() instead of hardcoded list
-    running_exercises = [e for e in exercises if is_running_category(e['category'])]
-    
-    if not running_exercises:
-        st.info("No running exercises")
-    else:
-        mileage_data = db.get_weekly_mileage()
-        
-        if mileage_data.empty:
-            st.info("No running data yet")
-        else:
-            current_week = get_now().isocalendar()[1]
-            current_year = get_now().year
-            
-            current_week_data = mileage_data[
-                (mileage_data['week'] == current_week) & 
-                (mileage_data['year'] == current_year)
-            ]
-            
-            current_miles = current_week_data['total_miles'].iloc[0] if not current_week_data.empty else 0
-            
-            last_week = current_week - 1 if current_week > 1 else 52
-            last_week_year = current_year if current_week > 1 else current_year - 1
-            
-            last_week_data = mileage_data[
-                (mileage_data['week'] == last_week) & 
-                (mileage_data['year'] == last_week_year)
-            ]
-            
-            last_week_miles = last_week_data['total_miles'].iloc[0] if not last_week_data.empty else 0
-            
-            pct_increase = ((current_miles - last_week_miles) / last_week_miles * 100) if last_week_miles > 0 else 0
-            
-            col1, col2 = st.columns(2)
-            col1.metric("This Week", f"{current_miles:.1f} mi")
-            col2.metric("Last Week", f"{last_week_miles:.1f} mi")
-            
-            col3, col4 = st.columns(2)
-            col3.metric("Change", f"{pct_increase:+.1f}%")
-            
-            recent_4_weeks = mileage_data.tail(4)
-            avg_4_weeks = recent_4_weeks['total_miles'].mean()
-            col4.metric("4-Wk Avg", f"{avg_4_weeks:.1f} mi")
-            
-            if pct_increase > 10 and last_week_miles > 0:
-                st.markdown(f"""
-                <div class="warning-box">
-                    ⚠️ <strong>Injury Risk!</strong><br>
-                    +{pct_increase:.1f}% increase. Consider scaling back to {last_week_miles * 1.1:.1f} mi
-                </div>
-                """, unsafe_allow_html=True)
-            elif pct_increase > 0 and last_week_miles > 0:
-                st.markdown(f"""
-                <div class="info-box">
-                    ✅ <strong>Safe increase</strong> ({pct_increase:.1f}%)
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.divider()
-            
-            mileage_data['week_label'] = mileage_data.apply(
-                lambda row: f"W{row['week']}", axis=1
-            )
-            
-            fig = px.bar(
-                mileage_data.tail(12),
-                x='week_label',
-                y='total_miles',
-                title="Last 12 Weeks"
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title="Miles",
-                showlegend=False,
-                height=350
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                with st.expander(f"**{exercise_name}**", expanded=True):
+                    if is_cardio_exercise:
+                        for idx, row in exercise_sets.iterrows():
+                            miles = row['reps'] / 10.0
+                            time_min = row['weight']
+                            pace = time_min / miles if miles > 0 else 0
+                            hr = row['set_number']
+                            
+                            col1, col2 = st.columns([5, 1])
+                            with col1:
+                                st.write(f"**{miles:.1f} mi** • {time_min:.0f} min • {int(pace)}:{int((pace % 1) * 60):02d}/mi" + (f" • {hr} bpm" if hr > 0 else ""))
+                            with col2:
+                                if st.button("🗑️", key=f"del_set_{idx}", use_container_width=True):
+                                    set_id = exercise_sets.loc[idx, 'id']
+                                    db.delete_set(set_id)
+                                    st.success("Deleted!")
+                                    st.rerun()
+                    else:
+                        for idx, row in exercise_sets.iterrows():
+                            col1, col2, col3, col4, col5 = st.columns([1, 1, 1.5, 2, 1])
+                            
+                            with col1:
+                                st.write(f"**Set {row['set_number']}**")
+                            with col2:
+                                st.write(f"{row['reps']} reps")
+                            with col3:
+                                st.write(f"{row['weight']} lbs")
+                            with col4:
+                                volume = row['reps'] * row['weight']
+                                est_1rm = calculate_estimated_1rm(row['weight'], row['reps'])
+                                st.caption(f"Vol: {volume:,.0f} • 1RM: {est_1rm:.0f}")
+                            with col5:
+                                if st.button("🗑️", key=f"del_set_{row['id']}", use_container_width=True):
+                                    db.delete_set(row['id'])
+                                    st.success("Deleted!")
+                                    st.rerun()
+                        
+                        st.divider()
+                        
+                        total_volume = (exercise_sets['reps'] * exercise_sets['weight']).sum()
+                        max_weight = exercise_sets['weight'].max()
+                        
+                        col1, col2 = st.columns(2)
+                        col1.metric("Total Volume", f"{total_volume:,.0f}")
+                        col2.metric("Max Weight", f"{max_weight} lbs")
 
 # ==================== HISTORY PAGE ====================
 
@@ -1121,8 +663,7 @@ elif page == "History":
                     for exercise_name, exercise_sets in sets_by_exercise.items():
                         st.markdown(f"**{exercise_name}**")
                         
-                        # FIX: use is_running_category() instead of hardcoded list
-                        is_running = exercise_sets and len(exercise_sets) > 0 and is_running_category(exercise_sets[0]['category'])
+                        is_running = exercise_sets and len(exercise_sets) > 0 and is_cardio_category(exercise_sets[0]['category'])
                         
                         if is_running:
                             for s in exercise_sets:
@@ -1209,94 +750,11 @@ elif page == "History":
                     st.success("Workout deleted!")
                     st.rerun()
 
-# ==================== PROGRESS PAGE ====================
-
-elif page == "Progress":
-    st.title("📈 Progress")
-    
-    exercises = db.get_all_exercises_cached()
-    
-    if not exercises:
-        st.warning("No exercises found")
-    else:
-        exercise_names = [e['name'] for e in exercises]
-        selected_exercise_name = st.selectbox("Exercise", exercise_names)
-        
-        exercise = db.get_exercise_by_name(selected_exercise_name)
-        # FIX: use is_running_category() instead of hardcoded list
-        is_running = is_running_category(exercise['category'])
-        
-        if is_running:
-            running_df = db.get_running_stats(exercise['id'])
-            
-            if running_df.empty:
-                st.info("No data yet")
-            else:
-                col1, col2 = st.columns(2)
-                col1.metric("Runs", len(running_df))
-                col2.metric("Miles", f"{running_df['miles'].sum():.1f}")
-                
-                col3, col4 = st.columns(2)
-                avg_pace = running_df['pace_min_per_mile'].mean()
-                col3.metric("Avg Pace", f"{int(avg_pace)}:{int((avg_pace % 1) * 60):02d}")
-                
-                if running_df['heart_rate'].mean() > 0:
-                    col4.metric("Avg HR", f"{running_df['heart_rate'].mean():.0f}")
-                
-                st.divider()
-                
-                fig = px.line(
-                    running_df,
-                    x='workout_date',
-                    y='pace_min_per_mile',
-                    markers=True,
-                    title="Pace Trend"
-                )
-                fig.update_layout(
-                    xaxis_title="",
-                    yaxis_title="Pace (min/mi)",
-                    yaxis_autorange="reversed",
-                    height=350
-                )
-                st.plotly_chart(fig, use_container_width=True)
-        
-        else:
-            pr_data = db.get_exercise_pr(exercise['id'])
-            
-            if pr_data['max_weight']:
-                col1, col2 = st.columns(2)
-                col1.metric("Max Weight", f"{pr_data['max_weight']['max_weight']:.0f} lbs")
-                
-                if pr_data['max_volume']:
-                    col2.metric("Max Volume", f"{pr_data['max_volume']['max_volume']:,.0f}")
-            
-            st.divider()
-            
-            progress_df = db.get_exercise_progress(exercise['id'], limit=200)
-            
-            if not progress_df.empty:
-                max_weight_df = progress_df.groupby('workout_date')['weight'].max().reset_index()
-                
-                fig = px.line(
-                    max_weight_df,
-                    x='workout_date',
-                    y='weight',
-                    markers=True,
-                    title="Weight Progress"
-                )
-                fig.update_layout(
-                    xaxis_title="",
-                    yaxis_title="Weight (lbs)",
-                    height=350
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
 # ==================== MANAGE EXERCISES PAGE ====================
 
 elif page == "Manage Exercises":
     st.title("⚙️ Manage Exercises")
     
-    # ==================== MANAGE CATEGORIES SECTION ====================
     st.subheader("📂 Manage Categories")
     
     with st.form("add_category"):
@@ -1349,7 +807,6 @@ elif page == "Manage Exercises":
     
     st.divider()
     
-    # ==================== MANAGE EXERCISES SECTION ====================
     st.subheader("💪 Manage Exercises")
     
     with st.form("add_exercise"):
