@@ -1,170 +1,24 @@
-
-
-import streamlit as st import pandas as pd from datetime import datetime, timedelta import pytz import database as db import utils # Set timezone to EST EST = pytz.timezone('America/New_York') def get_today(): """Get today's date in EST""" return datetime.now(EST).date() d
-
-pasted
-
-I want to make it so that it shows the all the sets, reps and weight from the last workout only
-
-10:08 AM
-Looking at your code, you want the "Last Session" info to show all sets (not just the first/last range), displayed clearly under the exercise. Let me update that section.
-
-
-Check the last_session display block
-Check the last_session display block
-The current code compresses last session into a single summary line. Here's the targeted fix — replace the last_session HTML block in your app.py:
-
-Find this:
-
-python
-if last_session:
-    st.markdown(f"""
-    <div class="last-session">
-        <strong>📊 Last: {last_session['date']}</strong><br>
-        {len(last_session['sets'])} sets • 
-        {last_session['sets'][0]['reps']}-{last_session['sets'][-1]['reps']} reps • 
-        {last_session['sets'][0]['weight']}-{max(s['weight'] for s in last_session['sets'])} lbs
-    </div>
-    """, unsafe_allow_html=True)
-Replace with:
-
-python
-if last_session:
-    sets_html = "".join(
-        f"<tr><td style='padding:2px 8px;'>Set {i+1}</td>"
-        f"<td style='padding:2px 8px;'>{s['reps']} reps</td>"
-        f"<td style='padding:2px 8px;'>{s['weight']} lbs</td></tr>"
-        for i, s in enumerate(last_session['sets'])
-    )
-    st.markdown(f"""
-    <div class="last-session">
-        <strong>📊 Last session: {last_session['date']}</strong><br>
-        <table style='margin-top:6px; font-size:0.95rem;'>
-            {sets_html}
-        </table>
-    </div>
-    """, unsafe_allow_html=True)
-This renders each set on its own row in a compact table inside the existing last-session styled box. No other changes needed — the last_session['sets'] data is already structured with reps and weight per set, so it just iterates through all of them instead of only grabbing index 0 and -1.
-
-
-import streamlit as st import pandas as pd import plotly.express as px import plotly.graph_objects as go from datetime import datetime, timedelta import pytz import database as db import utils # Set timezone to EST EST = pytz.timezone('America/New_York') def get_today(): """Get
-
-pasted
-
-how do I fix the indentation:
-
-10:24 AM
-Looking at the uploaded file, the issue is around line ~300 where the last_session block has misaligned code inside the with st.form(...) block. Here's the fix:
-
-Find this (the broken block):
-
-python
-                    if last_session:
-                        sets_html = "".join(
-                            f"<tr><td style='padding:2px 8px;'>Set {i+1}</td>"
-                            f"<td style='padding:2px 8px;'>{s['reps']} reps</td>"
-                            f"<td style='padding:2px 8px;'>{s['weight']} lbs</td></tr>"
-                            for i, s in enumerate(last_session['sets'])
-                        )
-                        st.markdown(f"""
-                        <div class="last-session">
-                            <strong>📊 Last session: {last_session['date']}</strong><br>
-                            <table style='margin-top:6px; font-size:0.95rem;'>
-                                {sets_html}
-                            </table>
-                        </div>
-                        """, unsafe_allow_html=True)
-                            
-                            # Use most recent set from today if exists, otherwise use last session
-                            if not todays_sets_for_exercise.empty:
-Replace with:
-
-python
-                    if last_session:
-                        sets_html = "".join(
-                            f"<tr><td style='padding:2px 8px;'>Set {i+1}</td>"
-                            f"<td style='padding:2px 8px;'>{s['reps']} reps</td>"
-                            f"<td style='padding:2px 8px;'>{s['weight']} lbs</td></tr>"
-                            for i, s in enumerate(last_session['sets'])
-                        )
-                        st.markdown(f"""
-                        <div class="last-session">
-                            <strong>📊 Last session: {last_session['date']}</strong><br>
-                            <table style='margin-top:6px; font-size:0.95rem;'>
-                                {sets_html}
-                            </table>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Use most recent set from today if exists, otherwise use last session
-                        if not todays_sets_for_exercise.empty:
-                            most_recent = todays_sets_for_exercise.iloc[-1]
-                            default_weight = float(most_recent['weight'])
-                            default_reps = int(most_recent['reps'])
-                        else:
-                            default_weight = max(s['weight'] for s in last_session['sets'])
-                            default_reps = last_session['sets'][0]['reps']
-The old version had two broken blocks — one for running (with default_miles/default_time/default_hr) and one for strength that were at the wrong indent level and mixed together. Since you stripped cardio out, you also want to delete the entire else branch that still referenced the old running variables (default_miles, default_time, default_hr) and the second st.markdown block with the old summary-style last session display. The replacement above is the clean strength-only version.
-
-
-import streamlit as st import pandas as pd import plotly.express as px import plotly.graph_objects as go from datetime import datetime, timedelta import pytz import database as db import utils # Set timezone to EST EST = pytz.timezone('America/New_York') def get_today(): """Get
-
-pasted
-
-just fix it for me:
-
-10:26 AM
-Let me clean up the whole Log Workout section properly.
-
-
-Ran 2 commands
-Ran 2 commands
-The file isn't in the upload directory — it was pasted as text. Let me write it out cleanly from the document content.
-
-
-Ran 2 commands, created a file, read a file
-Ran 2 commands, created a file, read a file
-Here's the cleaned-up file. Key changes made:
-
-Removed all the running/cardio code — all the is_running branches, default_miles/time/hr variables, running inputs, and running-specific PR checks are gone since you stripped cardio out
-Fixed the last_session block — clean indentation with the new table-style display, no duplicate/orphaned code after it
-Fixed the existing_sets scoping bug — moved existing_sets = pd.DataFrame() before the if existing_workout check so it's always defined
-Cleaned up Progress page — removed the running branch since it's strength-only now
-Passes Python syntax check with no errors
-
-App
-PY 
-
-You are out of free messages until 3:00 PM
-Upgrade
-
-
-
-Claude is AI and can make mistakes. Please double-check responses.
-App · PY
-Copy
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import pytz
- 
+
 import database as db
 import utils
- 
+
 # Set timezone to EST
 EST = pytz.timezone('America/New_York')
- 
+
 def get_today():
     """Get today's date in EST"""
     return datetime.now(EST).date()
- 
+
 def get_now():
     """Get current datetime in EST"""
     return datetime.now(EST)
- 
+
 # Page config
 st.set_page_config(
     page_title="Workout Tracker",
@@ -172,10 +26,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
- 
+
 # Initialize database
 db.init_database()
- 
+
 # Initialize session state
 if 'workout_id' not in st.session_state:
     st.session_state.workout_id = None
@@ -185,7 +39,7 @@ if 'workout_active' not in st.session_state:
     st.session_state.workout_active = False
 if 'workout_date' not in st.session_state:
     st.session_state.workout_date = None
- 
+
 # Custom CSS for mobile optimization
 st.markdown("""
     <style>
@@ -439,40 +293,40 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
- 
+
 # Sidebar navigation
 page = st.sidebar.radio(
     "Navigate",
     ["📊 Dashboard", "📝 Log Workout", "🏆 PR Records", "📏 Weekly Mileage", "📅 History", "📈 Progress", "⚙️ Manage Exercises"],
     label_visibility="collapsed"
 )
- 
+
 page = page.split(" ", 1)[1] if " " in page else page
- 
+
 # ==================== HELPER FUNCTIONS ====================
- 
+
 def get_exercises_by_category(category: str):
     all_exercises = db.get_all_exercises_cached()
     return [e for e in all_exercises if e['category'] == category]
- 
+
 def get_active_categories():
     all_exercises = db.get_all_exercises_cached()
     if not all_exercises:
         return []
     df = pd.DataFrame(all_exercises)
     return df['category'].unique().tolist()
- 
+
 def get_user_categories():
     categories = db.get_all_categories_cached()
     return [c['name'] for c in categories]
- 
+
 def calculate_estimated_1rm(weight: float, reps: int) -> float:
     if reps == 1:
         return weight
     return weight * (1 + reps / 30.0)
- 
+
 # ==================== DASHBOARD PAGE ====================
- 
+
 if page == "Dashboard":
     st.title("📊 Training Dashboard")
     
@@ -553,9 +407,9 @@ if page == "Dashboard":
     st.divider()
     st.subheader("⚡ Quick Actions")
     st.info("💡 Use the menu (☰) to navigate between pages")
- 
+
 # ==================== LOG WORKOUT PAGE ====================
- 
+
 elif page == "Log Workout":
     st.title("📝 Log Workout")
     
@@ -600,7 +454,7 @@ elif page == "Log Workout":
         
         st.divider()
         st.caption("💡 Start a workout to begin logging sets")
- 
+
     else:
         # ACTIVE WORKOUT
         col1, col2 = st.columns([3, 1])
@@ -822,9 +676,9 @@ elif page == "Log Workout":
                         
                         if is_pr_today:
                             st.markdown('<span class="pr-badge">🏆 PR!</span>', unsafe_allow_html=True)
- 
+
 # ==================== PR RECORDS PAGE ====================
- 
+
 elif page == "PR Records":
     st.title("🏆 Personal Records")
     
@@ -866,9 +720,9 @@ elif page == "PR Records":
                     <small>{pr['achieved_date']}</small>
                 </div>
                 """, unsafe_allow_html=True)
- 
+
 # ==================== WEEKLY MILEAGE PAGE ====================
- 
+
 elif page == "Weekly Mileage":
     st.title("📏 Weekly Mileage")
     
@@ -922,9 +776,9 @@ elif page == "Weekly Mileage":
             fig = px.bar(mileage_data.tail(12), x='week_label', y='total_miles', title="Last 12 Weeks")
             fig.update_layout(xaxis_title="", yaxis_title="Miles", showlegend=False, height=350)
             st.plotly_chart(fig, use_container_width=True)
- 
+
 # ==================== HISTORY PAGE ====================
- 
+
 elif page == "History":
     st.title("📅 History")
     
@@ -1001,9 +855,9 @@ elif page == "History":
                     db.delete_workout(workout['id'])
                     st.success("Workout deleted!")
                     st.rerun()
- 
+
 # ==================== PROGRESS PAGE ====================
- 
+
 elif page == "Progress":
     st.title("📈 Progress")
     
@@ -1034,9 +888,9 @@ elif page == "Progress":
             fig = px.line(max_weight_df, x='workout_date', y='weight', markers=True, title="Weight Progress")
             fig.update_layout(xaxis_title="", yaxis_title="Weight (lbs)", height=350)
             st.plotly_chart(fig, use_container_width=True)
- 
+
 # ==================== MANAGE EXERCISES PAGE ====================
- 
+
 elif page == "Manage Exercises":
     st.title("⚙️ Manage Exercises")
     
@@ -1154,8 +1008,7 @@ elif page == "Manage Exercises":
                             db.delete_exercise(exercise['id'])
                             st.success(f"Deleted {exercise['name']}")
                             st.rerun()
- 
+
 # Footer
 st.sidebar.divider()
 st.sidebar.caption("Optimized for mobile")
- 
